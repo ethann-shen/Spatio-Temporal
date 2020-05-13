@@ -1,2 +1,2 @@
-# Spatio-Temporal-
+# Spatio-Temporal
 Following along STA 444 
