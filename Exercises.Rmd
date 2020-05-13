@@ -2,7 +2,8 @@
 title: "Exercises"
 author: "Ethan Shen"
 date: "5/13/2020"
-output: html_document
+output:
+  github_document
 ---
 
 ```{r}
