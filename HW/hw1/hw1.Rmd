@@ -1,0 +1,98 @@
+---
+title: "Homework 1"
+author: Your Name Here
+date: Due 2/5/2018 by midnight
+output: 
+  html_document:
+    theme: cosmo
+---
+
+## Data
+
+<i>This repository contains several files that start with `dvisits`, these files contains / describe data from the Australian Health Survey of 1977-78 for 5190 single adults. The Rdata file contains two data frames: `train` and `test` and the results of a `modelr` resample_partition called `dvisits` (these two different data formats are equivalent, the modelr object was included in case you wanted to try out that approach). There is also `dvisits.html` which includes the codebook for the data set.</i>
+
+
+******
+
+
+### Question 1
+
+<i>Assume that you have observed data $y_1,\, \ldots, \, y_n$. Show that the multivariate normal likelihood for these data, when $\mathbf{\mu} = \underset{n \times 1}{\mathbf{0}}$ and $\mathbf{\Sigma} = \sigma^2 \underset{n \times n}{\mathbf{I}_n}$ is the same as the likelihood a treating these data as arising from $n$ iid normals with mean 0 and variance $\sigma^2$.</i>
+
+<!-- Include your derivation below using latex--> 
+
+$$ $$
+
+******
+
+### Question 2
+
+<i> The Bayesian lasso is a linear modeling approach where instead of a normal prior being placed on the $\beta$s we instead use a double exponential (Laplace) prior. If we were to use this prior generally describe what the Gibbs update step for $\beta_1$  would look like if we assume $\mu_\beta$=0  and $\lambda_\beta$ is fixed. You answer should include the formula for the conditional posterior up to a normalizing constant.</i>
+
+
+
+
+******
+
+### Question 3
+
+The deviance for a logistic regression model (bernoulli distribution, logit link) is given by the following formula,
+
+$$
+D =  2 \sum_{i=1}^n \left(Y_i \log \frac{Y_i}{\hat{p}_i}+(1-Y_i)\log \frac{1-Y_i}{1 - \hat{p}_i}\right) = \sum_{i=1}^n d_i^2 \\
+$$
+with a single deviance residual therefore given by
+$$
+d_i = \text{sign}(Y_i-\hat{p_i}) ~ \sqrt{ 2 \left(Y_i \log \frac{Y_i}{\hat{p}_i}+(1-Y_i)\log \frac{1-Y_i}{1 - \hat{p}_i}\right) }
+$$
+using the definition of deviance from class, derive these formula starting from the Bernoulli likelihood.
+
+
+
+
+
+******
+
+### Question 4
+
+<i>Using the training data start with some exploratory data analysis of the data - our outcome variable of interest is `doctorco`. You should examine the distribution of `doctorco` and any apparent relationship it has with the remaining variables.
+
+Based on what you find, describe what type of model do you think would be appropriate here and if you were only able to select at most *5* predictor variables to include in your model what would they be and why?</i>
+
+
+
+
+******
+
+### Question 5
+
+<i>Fit your model of choice to the data (either frequentist or Bayesian methods are fine here) and create an *appropriate* residuals plot ($\hat{Y}$ vs residuals) and comment on any structure or lack of structure you see.</i>
+
+
+
+
+
+
+******
+
+### Question 6
+
+<i>Pick two submodels from your original model: one with only 3 predictors and the other with only 1 predictor. Now for all three models calculate the following goodness of fit statistics:
+
+* $R^2$ (sum of squared residuals)
+* Deviance (sum of squared deviance residuals)
+* Pearson's statistic (sum of squared Pearson residuals)
+
+Present your results in a table and comment on any obvious patterns.</i>
+
+
+
+
+******
+
+### Question 7
+
+<i>Using both the `train` and `test` data, calculate an RMSE for all three models from Question 5. Do your results agree with the goodness fit results from question 5?</i>
+
+
+
