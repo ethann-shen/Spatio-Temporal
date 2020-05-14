@@ -10,7 +10,9 @@ output:
 library(tidyverse)
 ```
 
-# Bayesian Linear Models 
+# Lecture 1 
+
+## Bayesian Linear Models 
 
 ```{r}
 set.seed(129047809)
@@ -32,7 +34,7 @@ beta_hat = solve(t(X) %*% X, t(X) %*% d$Y)
 beta_hat
 ```
 
-## Jags
+### JAGS
 
 ```{r}
 model = "model{
@@ -144,5 +146,101 @@ df_ci %>%
   tidybayes::geom_pointintervalh() # thick line is 80%, thin line is 95%
 ```
 
+# Lecture 2 
 
+## Prediction
+
+```{r}
+set.seed(01232018)
+n = 100
+
+d = data_frame(
+  x = 1:n,
+  y = arima.sim(n=100, list(ar=0.9,sq=1)) %>% as.numeric() + x * 0.07
+)
+l = lm(y ~ x, data=d)
+
+
+# could add mu_pred[i] = beta[1] + beta[2] * x_pred[i]
+model_pred = 
+"model{
+  # Likelihood
+  for(i in 1:length(y)){
+    mu[i] = beta[1] + beta[2]*x[i]
+    y[i] ~ dnorm(mu[i], tau)
+    y_pred[i] ~ dnorm(mu[i], tau) # posterior predictive distribution for y
+  }
+
+  # Prior for beta
+  for(j in 1:2){
+    beta[j] ~ dnorm(0,1/100)
+  }
+
+  # Prior for sigma / tau2
+  tau ~ dgamma(1, 1)
+  sigma2 = 1/tau
+}"
+
+n_burn = 1000; n_iter = 5000
+
+
+m_pred = rjags::jags.model(
+  textConnection(model_pred), data=d, 
+  quiet=TRUE, n.chains = 1
+) 
+
+update(m, n.iter=n_burn, progress.bar="none")
+
+pred = rjags::coda.samples(
+  m_pred, variable.names=c("beta","sigma2","mu","y_pred","y","x"), 
+  n.iter=n_iter, progress.bar="none"
+)
+
+df_pred = tidybayes::spread_draws(pred, y_pred[i], y[i], x[i], mu[i]) %>%
+  mutate(resid = y - mu)
+
+df_pred
+
+# y_pred: full posterior predictive distribution (distribution of a new observation y_i), using uncertainty of beta1, beta2 and sigma2
+# mu: where do we expect point to fall in on average, using uncertainty of beta1, beta2)
+df_pred %>% 
+  ungroup() %>% 
+  filter(i %in% c(1,50,100)) %>% 
+  select(i, mu, y_pred) %>% 
+  tidyr::gather(param, val, -i) %>%
+  ggplot(aes(x=val, fill=param)) + 
+  geom_density(alpha=0.5) + 
+  facet_wrap(~i)
+```
+
+### Residuals 
+
+Important because with spatial-temporal data, we rarely have IID assumption
+
+```{r}
+# do not want to see this 
+df_pred %>% 
+  ungroup() %>%
+  ggplot(aes(x=x, y=resid)) + 
+  geom_boxplot(aes(group=x), outlier.alpha = 0.2)
+```
+
+## Model Evaluation (Bayesian R^2)
+
+```{r}
+df_R2 = df_pred %>%
+  group_by(.iteration) %>%
+  summarize(
+    R2_classic = var(mu) / var(y),
+    R2_bayes   = var(mu) / (var(mu) + var(resid))
+  )
+
+df_R2 %>% 
+  tidyr::gather(method, R2, -.iteration) %>%
+  ggplot(aes(x=R2, fill=method)) + 
+    geom_density(alpha=0.5) +
+    geom_vline(xintercept=summary(l)$r.squared, size=1)
+```
+
+Issue.... Bayesian $R^2 > 1$. Cannot use $R^2$ in Bayesian context. 
 
