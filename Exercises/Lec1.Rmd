@@ -132,7 +132,7 @@ df_mcmc %>%
 # vs. quantile interval/qi)
 df_ci = tidybayes::mean_hdi(df_mcmc, 
                             .value, 
-                            .width=c(0.8, 0.95) # 80% and 85% credible intervals
+                            .width=c(0.8, 0.95) # 80% and 95% credible intervals
 )
 
 df_ci
