@@ -3,14 +3,21 @@ title: "Homework 1"
 author: Your Name Here
 date: Due 2/5/2018 by midnight
 output: 
-  html_document:
-    theme: cosmo
+   github_document
 ---
 
 ## Data
 
 <i>This repository contains several files that start with `dvisits`, these files contains / describe data from the Australian Health Survey of 1977-78 for 5190 single adults. The Rdata file contains two data frames: `train` and `test` and the results of a `modelr` resample_partition called `dvisits` (these two different data formats are equivalent, the modelr object was included in case you wanted to try out that approach). There is also `dvisits.html` which includes the codebook for the data set.</i>
 
+```{r}
+library(tidyverse)
+```
+
+
+```{r}
+load("~/Documents/Projects for Fun /Spatio-Temporal/Spatio-Temporal Modeling/HW/hw1/dvisits.Rdata")
+```
 
 ******
 
@@ -19,7 +26,36 @@ output:
 
 <i>Assume that you have observed data $y_1,\, \ldots, \, y_n$. Show that the multivariate normal likelihood for these data, when $\mathbf{\mu} = \underset{n \times 1}{\mathbf{0}}$ and $\mathbf{\Sigma} = \sigma^2 \underset{n \times n}{\mathbf{I}_n}$ is the same as the likelihood a treating these data as arising from $n$ iid normals with mean 0 and variance $\sigma^2$.</i>
 
-<!-- Include your derivation below using latex--> 
+Normal Distribution
+
+$$
+y_1,\, \ldots, \, y_n \sim_{iid} N(0,\sigma^2) \longrightarrow p(y | \mu, \sigma^2) = \prod_{i=1}^{n} \frac{1}{\sqrt{2\pi\sigma^2}}e^{-\frac{y_i^2}{2\sigma^2}} = {(\frac{1}{\sqrt{2\pi\sigma^2}})}^n e^{-\frac{\sum_{i=1}^n y_i^2}{\sigma^2}}
+$$
+
+Multivariate Normal Distribution
+
+$$
+y_1,\, \ldots, \, y_n \sim_{iid} N(\underset{n \times 1}{\mathbf{0}},\sigma^2 \underset{n \times n}{\mathbf{I}_n})
+\longrightarrow
+p(y | \mu, \sigma^2) = (2\pi)^{-\frac{n}{2}}|\Sigma|^{-\frac{1}{2}}e^{-\frac{y^T\Sigma^{-1}y}{2}}
+$$
+
+Now, 
+
+$$ 
+|\Sigma|^{-\frac{1}{2}} = {\sigma^{2}}^{-\frac{n}{2}} \longrightarrow (2\pi)^{-\frac{n}{2}}|\Sigma|^{-\frac{1}{2}} = (2\pi\sigma^2)^{-\frac{n}{2}} = {(\frac{1}{\sqrt{2\pi\sigma^2}})}^n
+$$
+
+and 
+$$
+y^T\Sigma^{-1}y = \frac{\sum_{i=1}^n y_i^2}{\sigma^2}
+$$
+
+Putting it all together, 
+
+$$
+(2\pi)^{-\frac{n}{2}}|\Sigma|^{-\frac{1}{2}}e^{-\frac{y^T\Sigma^{-1}y}{2}} = {(\frac{1}{\sqrt{2\pi\sigma^2}})}^n e^{-\frac{\sum_{i=1}^n y_i^2}{\sigma^2}}
+$$
 
 $$ $$
 
@@ -58,7 +94,13 @@ using the definition of deviance from class, derive these formula starting from 
 <i>Using the training data start with some exploratory data analysis of the data - our outcome variable of interest is `doctorco`. You should examine the distribution of `doctorco` and any apparent relationship it has with the remaining variables.
 
 Based on what you find, describe what type of model do you think would be appropriate here and if you were only able to select at most *5* predictor variables to include in your model what would they be and why?</i>
+<br>
+We should use a Poisson model because the histogram of `doctorco` is skewed right. 
 
+```{r}
+g = glm(doctorco ~ ., data = train, family = "poisson")
+summary(g)
+```
 
 
 
@@ -68,9 +110,132 @@ Based on what you find, describe what type of model do you think would be approp
 
 <i>Fit your model of choice to the data (either frequentist or Bayesian methods are fine here) and create an *appropriate* residuals plot ($\hat{Y}$ vs residuals) and comment on any structure or lack of structure you see.</i>
 
+#### Frequentist Model 
+
+```{r warning = FALSE}
+g2 = glm(doctorco ~ illness + actdays + hospadmi + prescrib + sex, data = train, family = poisson(link = "log"))
+summary(g2)
+
+dev_resid = function(obs,pred) 
+  sign(obs-pred) * sqrt(2*(obs*log(obs/pred)-(obs-pred)))
+
+freqs_resid <- train %>%
+  mutate(pred = predict(g2, newdata=., type = "response")) %>%
+  mutate(standard = doctorco - pred ,
+         pearson = (doctorco - pred)/sqrt(pred),
+         deviance = dev_resid(doctorco, pred))
+```
+
+```{r warning = FALSE}
+freqs_resid %>%
+  gather(resid, value, standard:deviance) %>%
+  mutate(resid = forcats::as_factor(resid)) %>%
+  ggplot(aes(x=pred, y=value, color=resid)) +
+  geom_point(alpha = 0.3) + 
+  geom_segment(aes(xend=pred, yend=0)) +
+  labs(title = "Residuals vs. Predicted") + 
+  facet_wrap(~resid, scale="free_y") + 
+  guides(color=FALSE)
+
+freqs_resid %>%
+  gather(resid, value, standard:deviance) %>%
+  mutate(resid = forcats::as_factor(resid)) %>%
+  ggplot(aes(x=prescrib, y=value, color=resid)) +
+  geom_point(alpha = 0.3) + 
+  geom_segment(aes(xend=prescrib, yend=0)) +
+  labs(title = "Residuals vs. Prescrib") + 
+  facet_wrap(~resid, scale="free_y") + 
+  guides(color=FALSE)
+```
+
+#### Bayesian Model 
+
+```{r}
+model_data <- train %>%
+  select(doctorco, illness, actdays, hospadmi, prescrib, sex) %>%
+  rename(Y=doctorco)
+
+jags_data <- as.list(model_data)
+```
+
+```{r}
+pois_model1 = 
+  "model{
+  # Likelihood
+  for (i in 1:length(Y)) {
+    Y[i] ~ dpois(lambda[i]) # Poisson
+    log(lambda[i]) <- beta[1] + beta[2]*illness[i] + beta[3]*actdays[i] + beta[4]*hospadmi[i] + beta[5]*prescrib[i] + beta[6]*sex[i]
+    
+    # In-sample prediction
+    Y_hat[i] ~ dpois(lambda[i])
+  }
+  
+  # prior for beta
+  for (j in 1:6) {
+    beta[j] ~ dnorm(0, 1/100)
+  }
+}"
+
+m = rjags::jags.model(textConnection(pois_model1),
+                      data = jags_data)
 
 
+update(m, n.iter=100, progress.bar="none") # burn-in
+samp = rjags::coda.samples(
+  m, 
+  variable.names=c("beta","lambda", "Y_hat", "Y", "illness", "actdays", "hospadmi", "prescrib", "sex"), 
+  n.iter=1000 # actual samples
+)
+```
 
+
+```{r}
+tidybayes::gather_draws(samp, beta[i]) %>%
+  mutate(param = paste0(.variable,"[",i,"]")) %>%
+  ggplot(aes(x = .iteration, y = .value)) + 
+  geom_line() + 
+  facet_wrap(~param, ncol=2, scale="free_y")
+```
+
+```{r}
+resids_tbl <- tidybayes::spread_draws(samp, lambda[i], Y[i], Y_hat[i])
+```
+
+
+```{r}
+tmp_data = model_data %>% 
+  mutate(pred = predict(g2, newdata=., type = "response")) %>%
+  mutate(standard = Y - pred ,
+         pearson = (Y - pred)/sqrt(pred)) %>%
+  mutate(deviance = dev_resid(Y, pred)) %>%
+  select(Y_hat=Y, standard:deviance) %>%
+  tidyr::gather(resid, value, standard:deviance) %>%
+  mutate(resid = forcats::as_factor(resid))
+```
+
+
+```{r}
+resids_df <- resids_tbl %>%
+  ungroup() %>%
+  mutate(
+    standard = (Y-lambda),
+    pearson  = (Y-lambda) / sqrt(lambda),
+    deviance = dev_resid(Y, lambda)
+  ) %>%
+  tidyr::gather(resid, value, standard:deviance) %>%
+  mutate(resid = forcats::as_factor(resid))
+```
+
+
+```{r warning = FALSE}
+resids_df %>%
+  ggplot(aes(x = as.factor(Y_hat), y = value, color = resid)) +
+  geom_boxplot(outlier.alpha = 0.1) + 
+  labs(title = "Predicted vs. Residual") +
+  geom_point(data = tmp_data, color = "black", alpha = 0.7) +
+  facet_wrap(~resid, scale= "free_x") + 
+  coord_flip()
+```
 
 
 ******
@@ -85,7 +250,9 @@ Based on what you find, describe what type of model do you think would be approp
 
 Present your results in a table and comment on any obvious patterns.</i>
 
+```{r}
 
+```
 
 
 ******
@@ -94,5 +261,60 @@ Present your results in a table and comment on any obvious patterns.</i>
 
 <i>Using both the `train` and `test` data, calculate an RMSE for all three models from Question 5. Do your results agree with the goodness fit results from question 5?</i>
 
+```{r}
+resids_tbl %>%
+  ungroup() %>%
+  summarise(rmse_bayesian_train = (Y-Y_hat)^2 %>% mean() %>% sqrt() %>% round(3))
+```
 
+```{r}
+model_data_full <- rbind(train,test) %>%
+  select(doctorco, illness, actdays, hospadmi, prescrib, sex) %>%
+  rename(Y=doctorco)
+
+jags_data_full <- as.list(model_data_full)
+
+pois_model_full = 
+  "model{
+  # Likelihood
+  for (i in 1:length(Y)) {
+    Y[i] ~ dpois(lambda[i]) # Poisson
+    log(lambda[i]) <- beta[1] + beta[2]*illness[i] + beta[3]*actdays[i] + beta[4]*hospadmi[i] + beta[5]*prescrib[i] + beta[6]*sex[i]
+    
+    # In-sample prediction
+    Y_hat[i] ~ dpois(lambda[i])
+  }
+  
+  # prior for beta
+  for (j in 1:6) {
+    beta[j] ~ dnorm(0, 1/100)
+  }
+}"
+
+m_full = rjags::jags.model(textConnection(pois_model_full),
+                      data = jags_data_full)
+
+
+update(m_full, n.iter=1000) # burn-in
+samp_full = rjags::coda.samples(
+  m_full, 
+  variable.names=c("beta","lambda", "Y_hat", "Y", "illness", "actdays", "hospadmi", "prescrib", "sex"), 
+  n.iter=5000 # actual samples
+)
+```
+
+```{r}
+tidybayes::spread_draws(samp_full, Y[i], Y_hat[i]) %>%
+  ungroup() %>%
+  summarise(rmse_bayesian_full = (Y-Y_hat)^2 %>% mean() %>% sqrt() %>% round(3))
+```
+
+
+```{r}
+tidybayes::gather_draws(samp_full, beta[i]) %>%
+  mutate(param = paste0(.variable,"[",i,"]")) %>%
+  ggplot(aes(x = .iteration, y = .value)) + 
+  geom_line() + 
+  facet_wrap(~param, ncol=2, scale="free_y")
+```
 

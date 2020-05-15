@@ -7,7 +7,7 @@ Ethan Shen
 library(tidyverse)
 ```
 
-    ## ── Attaching packages ─────────────────────────────────────────── tidyverse 1.3.0 ──
+    ## ── Attaching packages ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── tidyverse 1.3.0 ──
 
     ## ✓ ggplot2 3.2.1     ✓ purrr   0.3.3
     ## ✓ tibble  3.0.1     ✓ dplyr   0.8.5
@@ -16,13 +16,15 @@ library(tidyverse)
 
     ## Warning: package 'tibble' was built under R version 3.6.2
 
-    ## ── Conflicts ────────────────────────────────────────────── tidyverse_conflicts() ──
+    ## ── Conflicts ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── tidyverse_conflicts() ──
     ## x dplyr::filter() masks stats::filter()
     ## x dplyr::lag()    masks stats::lag()
 
 # GLMs
 
 ## Poisson Regression
+
+Biggest issue: mean = variance
 
 ``` r
 aids = data_frame(
@@ -226,4 +228,38 @@ tidybayes::gather_draws(samp2, beta[i]) %>%
 
 ![](Lec3_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
 
-Model fit is better & MCMC chain is well-behaving
+Model fit is better & MCMC chain is well-behaving.
+
+However, there are almost 50% of points outside my 95% credible
+interval. Empirical coverage for 95% intereval is way off. Example of
+over-dispersion: more variability in the model than a Poisson model can
+handle.
+
+Quadratic model could fix this.
+
+``` r
+tmp = aids %>% select(X=year, standard:deviance) %>%
+  tidyr::gather(resid, value, standard:deviance) %>%
+  mutate(resid = forcats::as_factor(resid))
+
+
+tidybayes::spread_samples(samp2, lambda[i], X[i], Y[i]) %>%
+  ungroup() %>%
+  mutate(
+    standard = (Y-lambda),
+    pearson  = (Y-lambda) / sqrt(lambda),
+    deviance = dev_resid(Y, lambda)
+  ) %>%
+  tidyr::gather(resid, value, standard:deviance) %>%
+  mutate(resid = forcats::as_factor(resid)) %>%
+  ggplot(aes(x=as.factor(X),y=value,color=resid)) +
+    geom_boxplot(outlier.alpha = 0.1) +
+    geom_point(data=tmp, color="black") +
+    facet_wrap(~resid, scale="free_y")
+```
+
+    ## Warning: 'tidybayes::spread_samples' is deprecated.
+    ## Use 'spread_draws' instead.
+    ## See help("Deprecated") and help("tidybayes-deprecated").
+
+![](Lec3_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->

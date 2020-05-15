@@ -38,9 +38,21 @@ aids %>%
   tidyr::gather(type, residual, -year, -cases, -pred) %>%
   mutate(type = forcats::as_factor(type)) %>%
   ggplot(aes(x=year, y=residual, color=type)) +
-    geom_point() + geom_segment(aes(xend=year, yend=0)) +
-    facet_wrap(~type, scale="free_y") + 
-    guides(color=FALSE)
+  geom_point() + 
+  geom_segment(aes(xend=year, yend=0)) +
+  labs(title = "Residual vs. Year") + 
+  facet_wrap(~type, scale="free_y") + 
+  guides(color=FALSE)
+
+aids %>%
+  tidyr::gather(type, residual, -year, -cases, -pred) %>%
+  mutate(type = forcats::as_factor(type)) %>%
+  ggplot(aes(x=pred, y=residual, color=type)) +
+  geom_point() + 
+  geom_segment(aes(xend=pred, yend=0)) +
+  labs(title = "Residual vs. Predicted") + 
+  facet_wrap(~type, scale="free_y") + 
+  guides(color=FALSE)
 ```
 
 ## Updating the Model 
@@ -61,16 +73,16 @@ aids %>%
   tidyr::gather(type, residual, -year, -cases, -pred, -pred2) %>%
   mutate(type = forcats::as_factor(type)) %>%
   ggplot(aes(x=year, y=residual, color=type)) +
-    geom_point() + geom_segment(aes(xend=year, yend=0)) +
-    facet_wrap(~type, scale="free_y") + 
-    guides(color=FALSE)
+  geom_point() + geom_segment(aes(xend=year, yend=0)) +
+  facet_wrap(~type, scale="free_y") + 
+  guides(color=FALSE)
 ```
 
 ## Bayesian Model 
 
 ```{r}
 poisson_model = 
-"model{
+  "model{
   # Likelihood
   for (i in 1:length(Y)) {
     Y[i] ~ dpois(lambda[i]) # Poisson
@@ -109,8 +121,8 @@ tidybayes::spread_draws(samp, Y_hat[i], lambda[i], X[i],Y[i]) %>%
   ungroup() %>%
   tidyr::gather(param, value, Y_hat, lambda) %>%
   ggplot(aes(x=X,y=Y)) +
-    tidybayes::stat_lineribbon(aes(y=value), alpha=0.5) +
-    geom_point() + 
+  tidybayes::stat_lineribbon(aes(y=value), alpha=0.5) +
+  geom_point() + 
   facet_wrap(~param)
 ```
 
@@ -121,8 +133,8 @@ tidybayes::spread_draws(samp, Y_hat[i], lambda[i], X[i],Y[i]) %>%
 tidybayes::gather_draws(samp, beta[i]) %>%
   mutate(param = paste0(.variable,"[",i,"]")) %>%
   ggplot(aes(x=.iteration, y=.value)) + 
-    geom_line() + 
-    facet_wrap(~param, ncol=1, scale="free_y")
+  geom_line() + 
+  facet_wrap(~param, ncol=1, scale="free_y")
 ```
 
 Model fit is bad, MCMC chain is not well-behaving. 
@@ -142,7 +154,7 @@ summary(glm(cases~I(year-1981), data=aids, family=poisson))$coefficients
 
 ```{r}
 poisson_model_revised = 
-"model{
+  "model{
   # Likelihood
   for (i in 1:length(Y)) {
     Y[i] ~ dpois(lambda[i]) # Poisson
@@ -177,8 +189,8 @@ tidybayes::spread_draws(samp2, Y_hat[i], lambda[i], X[i],Y[i]) %>%
   ungroup() %>%
   tidyr::gather(param, value, Y_hat, lambda) %>%
   ggplot(aes(x=X,y=Y)) +
-    tidybayes::stat_lineribbon(aes(y=value), alpha=0.5) +
-    geom_point() + 
+  tidybayes::stat_lineribbon(aes(y=value), alpha=0.5) +
+  geom_point() + 
   facet_wrap(~param)
 ```
 
@@ -186,8 +198,8 @@ tidybayes::spread_draws(samp2, Y_hat[i], lambda[i], X[i],Y[i]) %>%
 tidybayes::gather_draws(samp2, beta[i]) %>%
   mutate(param = paste0(.variable,"[",i,"]")) %>%
   ggplot(aes(x=.iteration, y=.value)) + 
-    geom_line() + 
-    facet_wrap(~param, ncol=1, scale="free_y")
+  geom_line() + 
+  facet_wrap(~param, ncol=1, scale="free_y")
 ```
 
 Model fit is better & MCMC chain is well-behaving. 
@@ -195,3 +207,25 @@ Model fit is better & MCMC chain is well-behaving.
 However, there are almost 50% of points outside my 95% credible interval. Empirical coverage for 95% intereval is way off. Example of over-dispersion: more variability in the model than a Poisson model can handle. 
 
 Quadratic model could fix this. 
+
+```{r}
+tmp = aids %>% select(X=year, standard:deviance) %>%
+  tidyr::gather(resid, value, standard:deviance) %>%
+  mutate(resid = forcats::as_factor(resid))
+
+
+tidybayes::spread_samples(samp2, lambda[i], X[i], Y[i]) %>%
+  ungroup() %>%
+  mutate(
+    standard = (Y-lambda),
+    pearson  = (Y-lambda) / sqrt(lambda),
+    deviance = dev_resid(Y, lambda)
+  ) %>%
+  tidyr::gather(resid, value, standard:deviance) %>%
+  mutate(resid = forcats::as_factor(resid)) %>%
+  ggplot(aes(x=as.factor(X),y=value,color=resid)) +
+  geom_boxplot(outlier.alpha = 0.1) +
+  geom_point(data=tmp, color="black") +
+  facet_wrap(~resid, scale="free_y")
+```
+
