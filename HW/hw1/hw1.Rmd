@@ -2,8 +2,7 @@
 title: "Homework 1"
 author: Your Name Here
 date: Due 2/5/2018 by midnight
-output: 
-   github_document
+output: github_document
 ---
 
 ## Data
@@ -94,7 +93,9 @@ using the definition of deviance from class, derive these formula starting from 
 <i>Using the training data start with some exploratory data analysis of the data - our outcome variable of interest is `doctorco`. You should examine the distribution of `doctorco` and any apparent relationship it has with the remaining variables.
 
 Based on what you find, describe what type of model do you think would be appropriate here and if you were only able to select at most *5* predictor variables to include in your model what would they be and why?</i>
+
 <br>
+
 We should use a Poisson model because the histogram of `doctorco` is skewed right. 
 
 ```{r}
@@ -226,15 +227,13 @@ resids_df <- resids_tbl %>%
   mutate(resid = forcats::as_factor(resid))
 ```
 
-
 ```{r warning = FALSE}
 resids_df %>%
   ggplot(aes(x = as.factor(Y_hat), y = value, color = resid)) +
   geom_boxplot(outlier.alpha = 0.1) + 
   labs(title = "Predicted vs. Residual") +
   geom_point(data = tmp_data, color = "black", alpha = 0.7) +
-  facet_wrap(~resid, scale= "free_x") + 
-  coord_flip()
+  facet_wrap(~resid, scale= "free_y", ncol=2) 
 ```
 
 
@@ -251,7 +250,19 @@ resids_df %>%
 Present your results in a table and comment on any obvious patterns.</i>
 
 ```{r}
-
+resids_tbl %>%
+  ungroup() %>%
+  mutate(
+    standard = (Y-lambda),
+    pearson  = (Y-lambda) / sqrt(lambda),
+    deviance = dev_resid(Y, lambda)
+  ) %>%
+  group_by(.iteration) %>%
+  summarise(
+    R2_bayes_standard = var(Y_hat) / (var(Y_hat) + var(standard)),
+    R2_bayes_pearson = sum(pearson**2, na.rm = TRUE),
+   R2_bayes_deviance = sum(deviance**2, na.rm = TRUE)
+  )
 ```
 
 
@@ -310,11 +321,4 @@ tidybayes::spread_draws(samp_full, Y[i], Y_hat[i]) %>%
 ```
 
 
-```{r}
-tidybayes::gather_draws(samp_full, beta[i]) %>%
-  mutate(param = paste0(.variable,"[",i,"]")) %>%
-  ggplot(aes(x = .iteration, y = .value)) + 
-  geom_line() + 
-  facet_wrap(~param, ncol=2, scale="free_y")
-```
 

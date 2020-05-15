@@ -1,44 +1,63 @@
-Lec3
-================
-Ethan Shen
-5/14/2020
+---
+title: "Lec3"
+author: "Ethan Shen"
+date: "5/14/2020"
+output: 
+  html_document: 
+   
+    keep_md: yes
+---
 
-``` r
+
+```r
 library(tidyverse)
 ```
 
-    ## ── Attaching packages ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── tidyverse 1.3.0 ──
+```
+## ── Attaching packages ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── tidyverse 1.3.0 ──
+```
 
-    ## ✓ ggplot2 3.2.1     ✓ purrr   0.3.3
-    ## ✓ tibble  3.0.1     ✓ dplyr   0.8.5
-    ## ✓ tidyr   1.0.0     ✓ stringr 1.4.0
-    ## ✓ readr   1.3.1     ✓ forcats 0.4.0
+```
+## ✓ ggplot2 3.2.1     ✓ purrr   0.3.3
+## ✓ tibble  3.0.1     ✓ dplyr   0.8.5
+## ✓ tidyr   1.0.0     ✓ stringr 1.4.0
+## ✓ readr   1.3.1     ✓ forcats 0.4.0
+```
 
-    ## Warning: package 'tibble' was built under R version 3.6.2
+```
+## Warning: package 'tibble' was built under R version 3.6.2
+```
 
-    ## ── Conflicts ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── tidyverse_conflicts() ──
-    ## x dplyr::filter() masks stats::filter()
-    ## x dplyr::lag()    masks stats::lag()
+```
+## ── Conflicts ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── tidyverse_conflicts() ──
+## x dplyr::filter() masks stats::filter()
+## x dplyr::lag()    masks stats::lag()
+```
 
 # GLMs
+
+$ R^2$
 
 ## Poisson Regression
 
 Biggest issue: mean = variance
 
-``` r
+
+```r
 aids = data_frame(
   year = 1981:1993,
   cases = c(12, 14, 33, 50, 67, 74, 123, 141, 165, 204, 253, 246, 240) %>% as.integer()
 )
 ```
 
-    ## Warning: `data_frame()` is deprecated as of tibble 1.1.0.
-    ## Please use `tibble()` instead.
-    ## This warning is displayed once every 8 hours.
-    ## Call `lifecycle::last_warnings()` to see where this warning was generated.
+```
+## Warning: `data_frame()` is deprecated as of tibble 1.1.0.
+## Please use `tibble()` instead.
+## This warning is displayed once every 8 hours.
+## Call `lifecycle::last_warnings()` to see where this warning was generated.
+```
 
-``` r
+```r
 g = glm(cases~year, data=aids, family=poisson)
 
 
@@ -56,16 +75,33 @@ aids %>%
   tidyr::gather(type, residual, -year, -cases, -pred) %>%
   mutate(type = forcats::as_factor(type)) %>%
   ggplot(aes(x=year, y=residual, color=type)) +
-    geom_point() + geom_segment(aes(xend=year, yend=0)) +
-    facet_wrap(~type, scale="free_y") + 
-    guides(color=FALSE)
+  geom_point() + 
+  geom_segment(aes(xend=year, yend=0)) +
+  labs(title = "Residual vs. Year") + 
+  facet_wrap(~type, scale="free_y") + 
+  guides(color=FALSE)
 ```
 
-![](Lec3_files/figure-gfm/unnamed-chunk-2-1.png)<!-- -->
+![](Lec3_files/figure-html/unnamed-chunk-2-1.png)<!-- -->
 
-## Updating the Model
+```r
+aids %>%
+  tidyr::gather(type, residual, -year, -cases, -pred) %>%
+  mutate(type = forcats::as_factor(type)) %>%
+  ggplot(aes(x=pred, y=residual, color=type)) +
+  geom_point() + 
+  geom_segment(aes(xend=pred, yend=0)) +
+  labs(title = "Residual vs. Predicted") + 
+  facet_wrap(~type, scale="free_y") + 
+  guides(color=FALSE)
+```
 
-``` r
+![](Lec3_files/figure-html/unnamed-chunk-2-2.png)<!-- -->
+
+## Updating the Model 
+
+
+```r
 g2 = glm(cases~poly(year, 2), data=aids, family=poisson)
 
 aids = aids %>%
@@ -81,18 +117,19 @@ aids %>%
   tidyr::gather(type, residual, -year, -cases, -pred, -pred2) %>%
   mutate(type = forcats::as_factor(type)) %>%
   ggplot(aes(x=year, y=residual, color=type)) +
-    geom_point() + geom_segment(aes(xend=year, yend=0)) +
-    facet_wrap(~type, scale="free_y") + 
-    guides(color=FALSE)
+  geom_point() + geom_segment(aes(xend=year, yend=0)) +
+  facet_wrap(~type, scale="free_y") + 
+  guides(color=FALSE)
 ```
 
-![](Lec3_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
+![](Lec3_files/figure-html/unnamed-chunk-3-1.png)<!-- -->
 
-## Bayesian Model
+## Bayesian Model 
 
-``` r
+
+```r
 poisson_model = 
-"model{
+  "model{
   # Likelihood
   for (i in 1:length(Y)) {
     Y[i] ~ dpois(lambda[i]) # Poisson
@@ -123,60 +160,62 @@ samp = rjags::coda.samples(
 )
 ```
 
-### Model Fit
+### Model Fit 
 
-``` r
+
+```r
 # terrible 
 tidybayes::spread_draws(samp, Y_hat[i], lambda[i], X[i],Y[i]) %>%
   ungroup() %>%
   tidyr::gather(param, value, Y_hat, lambda) %>%
   ggplot(aes(x=X,y=Y)) +
-    tidybayes::stat_lineribbon(aes(y=value), alpha=0.5) +
-    geom_point() + 
+  tidybayes::stat_lineribbon(aes(y=value), alpha=0.5) +
+  geom_point() + 
   facet_wrap(~param)
 ```
 
-![](Lec3_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
+![](Lec3_files/figure-html/unnamed-chunk-5-1.png)<!-- -->
 
-### MCMC Diagnostics
+### MCMC Diagnostics 
 
-``` r
+
+```r
 # neither one is converging, seems like they are dependent
 tidybayes::gather_draws(samp, beta[i]) %>%
   mutate(param = paste0(.variable,"[",i,"]")) %>%
   ggplot(aes(x=.iteration, y=.value)) + 
-    geom_line() + 
-    facet_wrap(~param, ncol=1, scale="free_y")
+  geom_line() + 
+  facet_wrap(~param, ncol=1, scale="free_y")
 ```
 
-![](Lec3_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
+![](Lec3_files/figure-html/unnamed-chunk-6-1.png)<!-- -->
 
-Model fit is bad, MCMC chain is not well-behaving.
+Model fit is bad, MCMC chain is not well-behaving. 
 
-This is bcause the prior is uninformative. In the model, the intercept
-is -397 but the coefficient for `year` is 0.2021.
+This is bcause the prior is uninformative. In the model, the intercept is -397 but the coefficient for `year` is 0.2021. 
 
-Our prior is \(N(0,10)\), which means values of \(\beta\) will be
-between -30 and 30. This works for the `year` coefficient but NOT the
-intercept. Will take chain forever to explore the space for the
-intercept.
+Our prior is $N(0,10)$, which means values of $\beta$ will be between -30 and 30. This works for the `year` coefficient but NOT the intercept. Will take chain forever to explore the space for the intercept. 
 
-## Fixing Model
+## Fixing Model 
 
-``` r
+
+```r
 # scaling data
 summary(glm(cases~I(year-1981), data=aids, family=poisson))$coefficients
 ```
 
-    ##                 Estimate  Std. Error  z value      Pr(>|z|)
-    ## (Intercept)    3.3427107 0.070920013 47.13353  0.000000e+00
-    ## I(year - 1981) 0.2021212 0.007771489 26.00804 4.016408e-149
+```
+##                 Estimate  Std. Error  z value      Pr(>|z|)
+## (Intercept)    3.3427107 0.070920013 47.13353  0.000000e+00
+## I(year - 1981) 0.2021212 0.007771489 26.00804 4.016408e-149
+```
 
 ### Revising JAGS
 
-``` r
+
+```r
 poisson_model_revised = 
-"model{
+  "model{
   # Likelihood
   for (i in 1:length(Y)) {
     Y[i] ~ dpois(lambda[i]) # Poisson
@@ -205,39 +244,39 @@ samp2 = rjags::coda.samples(
 )
 ```
 
-``` r
+
+```r
 #y_hat is posterior predictive
 tidybayes::spread_draws(samp2, Y_hat[i], lambda[i], X[i],Y[i]) %>%
   ungroup() %>%
   tidyr::gather(param, value, Y_hat, lambda) %>%
   ggplot(aes(x=X,y=Y)) +
-    tidybayes::stat_lineribbon(aes(y=value), alpha=0.5) +
-    geom_point() + 
+  tidybayes::stat_lineribbon(aes(y=value), alpha=0.5) +
+  geom_point() + 
   facet_wrap(~param)
 ```
 
-![](Lec3_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
+![](Lec3_files/figure-html/unnamed-chunk-9-1.png)<!-- -->
 
-``` r
+
+```r
 tidybayes::gather_draws(samp2, beta[i]) %>%
   mutate(param = paste0(.variable,"[",i,"]")) %>%
   ggplot(aes(x=.iteration, y=.value)) + 
-    geom_line() + 
-    facet_wrap(~param, ncol=1, scale="free_y")
+  geom_line() + 
+  facet_wrap(~param, ncol=1, scale="free_y")
 ```
 
-![](Lec3_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
+![](Lec3_files/figure-html/unnamed-chunk-10-1.png)<!-- -->
 
-Model fit is better & MCMC chain is well-behaving.
+Model fit is better & MCMC chain is well-behaving. 
 
-However, there are almost 50% of points outside my 95% credible
-interval. Empirical coverage for 95% intereval is way off. Example of
-over-dispersion: more variability in the model than a Poisson model can
-handle.
+However, there are almost 50% of points outside my 95% credible interval. Empirical coverage for 95% intereval is way off. Example of over-dispersion: more variability in the model than a Poisson model can handle. 
 
-Quadratic model could fix this.
+Quadratic model could fix this. 
 
-``` r
+
+```r
 tmp = aids %>% select(X=year, standard:deviance) %>%
   tidyr::gather(resid, value, standard:deviance) %>%
   mutate(resid = forcats::as_factor(resid))
@@ -253,13 +292,16 @@ tidybayes::spread_samples(samp2, lambda[i], X[i], Y[i]) %>%
   tidyr::gather(resid, value, standard:deviance) %>%
   mutate(resid = forcats::as_factor(resid)) %>%
   ggplot(aes(x=as.factor(X),y=value,color=resid)) +
-    geom_boxplot(outlier.alpha = 0.1) +
-    geom_point(data=tmp, color="black") +
-    facet_wrap(~resid, scale="free_y")
+  geom_boxplot(outlier.alpha = 0.1) +
+  geom_point(data=tmp, color="black") +
+  facet_wrap(~resid, scale="free_y")
 ```
 
-    ## Warning: 'tidybayes::spread_samples' is deprecated.
-    ## Use 'spread_draws' instead.
-    ## See help("Deprecated") and help("tidybayes-deprecated").
+```
+## Warning: 'tidybayes::spread_samples' is deprecated.
+## Use 'spread_draws' instead.
+## See help("Deprecated") and help("tidybayes-deprecated").
+```
 
-![](Lec3_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
+![](Lec3_files/figure-html/unnamed-chunk-11-1.png)<!-- -->
+

@@ -19,7 +19,7 @@ codebook for the data
 library(tidyverse)
 ```
 
-    ## ── Attaching packages ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── tidyverse 1.3.0 ──
+    ## ── Attaching packages ─────────────────────────────────────────── tidyverse 1.3.0 ──
 
     ## ✓ ggplot2 3.2.1     ✓ purrr   0.3.3
     ## ✓ tibble  3.0.1     ✓ dplyr   0.8.5
@@ -28,7 +28,7 @@ library(tidyverse)
 
     ## Warning: package 'tibble' was built under R version 3.6.2
 
-    ## ── Conflicts ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── tidyverse_conflicts() ──
+    ## ── Conflicts ────────────────────────────────────────────── tidyverse_conflicts() ──
     ## x dplyr::filter() masks stats::filter()
     ## x dplyr::lag()    masks stats::lag()
 
@@ -117,8 +117,12 @@ has with the remaining variables.
 Based on what you find, describe what type of model do you think would
 be appropriate here and if you were only able to select at most *5*
 predictor variables to include in your model what would they be and
-why?</i> <br> We should use a Poisson model because the histogram of
-`doctorco` is skewed right.
+why?</i>
+
+<br>
+
+We should use a Poisson model because the histogram of `doctorco` is
+skewed right.
 
 ``` r
 g = glm(doctorco ~ ., data = train, family = "poisson")
@@ -343,8 +347,7 @@ resids_df %>%
   geom_boxplot(outlier.alpha = 0.1) + 
   labs(title = "Predicted vs. Residual") +
   geom_point(data = tmp_data, color = "black", alpha = 0.7) +
-  facet_wrap(~resid, scale= "free_x") + 
-  coord_flip()
+  facet_wrap(~resid, scale= "free_y", ncol=2) 
 ```
 
 ![](hw1_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
@@ -362,6 +365,37 @@ calculate the following goodness of fit statistics:
   - Pearson’s statistic (sum of squared Pearson residuals)
 
 Present your results in a table and comment on any obvious patterns.</i>
+
+``` r
+resids_tbl %>%
+  ungroup() %>%
+  mutate(
+    standard = (Y-lambda),
+    pearson  = (Y-lambda) / sqrt(lambda),
+    deviance = dev_resid(Y, lambda)
+  ) %>%
+  group_by(.iteration) %>%
+  summarise(
+    R2_bayes_standard = var(Y_hat) / (var(Y_hat) + var(standard)),
+    R2_bayes_pearson = sum(pearson**2, na.rm = TRUE),
+   R2_bayes_deviance = sum(deviance**2, na.rm = TRUE)
+  )
+```
+
+    ## # A tibble: 1,000 x 4
+    ##    .iteration R2_bayes_standard R2_bayes_pearson R2_bayes_deviance
+    ##         <int>             <dbl>            <dbl>             <dbl>
+    ##  1          1             0.483            5308.             1812.
+    ##  2          2             0.500            5476.             1853.
+    ##  3          3             0.486            5659.             1904.
+    ##  4          4             0.513            5396.             1824.
+    ##  5          5             0.530            5316.             1803.
+    ##  6          6             0.488            5376.             1823.
+    ##  7          7             0.491            5438.             1842.
+    ##  8          8             0.491            5580.             1887.
+    ##  9          9             0.470            5776.             1950.
+    ## 10         10             0.537            5258.             1801.
+    ## # … with 990 more rows
 
 -----
 
@@ -439,13 +473,3 @@ tidybayes::spread_draws(samp_full, Y[i], Y_hat[i]) %>%
     ##   rmse_bayesian_full
     ##                <dbl>
     ## 1              0.907
-
-``` r
-tidybayes::gather_draws(samp_full, beta[i]) %>%
-  mutate(param = paste0(.variable,"[",i,"]")) %>%
-  ggplot(aes(x = .iteration, y = .value)) + 
-  geom_line() + 
-  facet_wrap(~param, ncol=2, scale="free_y")
-```
-
-![](hw1_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
