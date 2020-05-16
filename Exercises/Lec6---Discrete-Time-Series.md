@@ -15,27 +15,6 @@ output:
 library(tidyverse)
 ```
 
-```
-## ── Attaching packages ─────────────────────────────────────────────────────────────────────────────────────── tidyverse 1.3.0 ──
-```
-
-```
-## ✓ ggplot2 3.2.1     ✓ purrr   0.3.3
-## ✓ tibble  3.0.1     ✓ dplyr   0.8.5
-## ✓ tidyr   1.0.0     ✓ stringr 1.4.0
-## ✓ readr   1.3.1     ✓ forcats 0.4.0
-```
-
-```
-## Warning: package 'tibble' was built under R version 3.6.2
-```
-
-```
-## ── Conflicts ────────────────────────────────────────────────────────────────────────────────────────── tidyverse_conflicts() ──
-## x dplyr::filter() masks stats::filter()
-## x dplyr::lag()    masks stats::lag()
-```
-
 ## Stationarity 
 
 Strict Stationarity: Joint distributions are identical at different points in time, unnecessarily strong and hard to achieve. 
@@ -56,16 +35,7 @@ rw = data_frame(
   t = 1:1000,
   y = cumsum(c(0, rnorm(999)))
 )
-```
 
-```
-## Warning: `data_frame()` is deprecated as of tibble 1.1.0.
-## Please use `tibble()` instead.
-## This warning is displayed once every 8 hours.
-## Call `lifecycle::last_warnings()` to see where this warning was generated.
-```
-
-```r
 ggplot(rw, aes(x=t, y=y)) + geom_line() + labs(title="Random walk")
 ```
 
@@ -73,18 +43,6 @@ ggplot(rw, aes(x=t, y=y)) + geom_line() + labs(title="Random walk")
 
 ```r
 forecast::ggtsdisplay(rw$y, lag.max = 50)
-```
-
-```
-## Registered S3 method overwritten by 'xts':
-##   method     from
-##   as.zoo.xts zoo
-```
-
-```
-## Registered S3 method overwritten by 'quantmod':
-##   method            from
-##   as.zoo.data.frame zoo
 ```
 
 ![](Lec6---Discrete-Time-Series_files/figure-html/unnamed-chunk-2-2.png)<!-- -->
@@ -234,10 +192,6 @@ aus_wine %>%
   geom_point()
 ```
 
-```
-## Don't know how to automatically pick scale for object of type ts. Defaulting to continuous.
-```
-
 ![](Lec6---Discrete-Time-Series_files/figure-html/unnamed-chunk-6-1.png)<!-- -->
 
 
@@ -259,10 +213,6 @@ d %>%
   labs(title = "Model Fit")
 ```
 
-```
-## Don't know how to automatically pick scale for object of type ts. Defaulting to continuous.
-```
-
 ![](Lec6---Discrete-Time-Series_files/figure-html/unnamed-chunk-7-1.png)<!-- -->
 
 
@@ -278,10 +228,6 @@ ggplot(aes(x=date, y=residual, color=type)) +
   geom_line() +
   facet_wrap(~type, nrow=2) +
   labs(title = "Residuals")
-```
-
-```
-## Don't know how to automatically pick scale for object of type ts. Defaulting to continuous.
 ```
 
 ![](Lec6---Discrete-Time-Series_files/figure-html/unnamed-chunk-8-1.png)<!-- -->
@@ -317,3 +263,77 @@ ggplot(d_lags, aes(x=lag_value, y=quad_resid)) +
 
 Very linear trend at lag 12, but not much of a trend at lags 1-11. 
 
+## Autoregressive Errors
+
+
+```r
+# fitting model where lag12 is a predictor
+d_ar = mutate(d, lag_12 = lag(quad_resid, 12))
+l_ar = lm(quad_resid ~ lag_12, data=d_ar)
+summary(l_ar)
+```
+
+```
+## 
+## Call:
+## lm(formula = quad_resid ~ lag_12, data = d_ar)
+## 
+## Residuals:
+##      Min       1Q   Median       3Q      Max 
+## -12286.5  -1380.5     73.4   1505.2   7188.1 
+## 
+## Coefficients:
+##              Estimate Std. Error t value Pr(>|t|)    
+## (Intercept)  83.65080  201.58416   0.415    0.679    
+## lag_12        0.89024    0.04045  22.006   <2e-16 ***
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+## 
+## Residual standard error: 2581 on 162 degrees of freedom
+##   (12 observations deleted due to missingness)
+## Multiple R-squared:  0.7493,	Adjusted R-squared:  0.7478 
+## F-statistic: 484.3 on 1 and 162 DF,  p-value: < 2.2e-16
+```
+
+
+```r
+d_ar = d_ar %>%
+  modelr::add_residuals(l_ar)
+
+d_ar %>%
+  ggplot(aes(x=date, y=resid)) +
+  geom_point() + 
+  geom_line() + 
+  labs(title = "Residuals of lag-12 Residuals")
+```
+
+![](Lec6---Discrete-Time-Series_files/figure-html/unnamed-chunk-12-1.png)<!-- -->
+
+```r
+forecast::ggtsdisplay(l_ar$residuals, lag.max = 36)
+```
+
+![](Lec6---Discrete-Time-Series_files/figure-html/unnamed-chunk-12-2.png)<!-- -->
+
+Still autocorrelation in the residuals (big peaks at 12 months, but still smaller than before), but no addition pattern (nothing at 24 or 36)
+
+
+
+```r
+bind_cols(
+  d_ar %>%
+    modelr::add_residuals(l_ar) %>%
+    select(-lag_12, -lin_resid, -quad_resid),
+  purrr::map_dfc(0:12, ~ list(lag = lag(d_ar$resid, n=.x))) %>% select(-lag)
+) %>%
+  tidyr::gather(lag, lag_value, -(date:resid)) %>%
+  mutate(lag = forcats::as_factor(lag)) %>%
+  ggplot(aes(x=lag_value, y=resid)) +
+    geom_point() +
+    facet_wrap(~lag, ncol=4) +
+    geom_smooth(method="lm", color='red', se = FALSE, alpha=0.1)
+```
+
+![](Lec6---Discrete-Time-Series_files/figure-html/unnamed-chunk-13-1.png)<!-- -->
+
+The lag-12 structure is not there as much anymore (except for the one influential point).

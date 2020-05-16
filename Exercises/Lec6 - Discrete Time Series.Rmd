@@ -12,7 +12,7 @@ output:
 ggplot2::theme_set(ggplot2::theme_bw())
 ```
 
-```{r}
+```{r warning=FALSE, message=FALSE}
 library(tidyverse)
 ```
 
@@ -30,7 +30,7 @@ Weak Stationarity:
 
 Let $y_t = y_{t-1} + w_t$ with $y_0=0$ and $w_t \sim \mathcal{N}(0,1)$.
 
-```{r}
+```{r warning=FALSE, message=FALSE}
 rw = data_frame(
   t = 1:1000,
   y = cumsum(c(0, rnorm(999)))
@@ -66,7 +66,7 @@ There are $t$ times that $i=j$, so $Cov(y_t, y_{t+k}) = 1 + \dots + 1 = t$. Unce
 
 Let $y_t = \delta + y_{t-1} + w_t$ with $y_0=0$ and $w_t \sim \mathcal{N}(0,1)$.
 
-```{r}
+```{r warning=FALSE, message=FALSE}
 rwt = data_frame(
   t = 1:1000,
   y = cumsum(c(0, 0.1+rnorm(999)))
@@ -89,7 +89,7 @@ Let $w_t \sim \mathcal{N}(0,1)$ and $y_t = w_{t-1}+w_t$.
 
 Makes our walk not likely to move (next step could cancel out first step).
 
-```{r warning=FALSE}
+```{r warning=FALSE, message=FALSE}
 ma = data_frame(
   t = 1:1000,
   w = rnorm(1000)
@@ -123,7 +123,7 @@ Covariance doesn't depend on time $t$, but is not constant. However, it only dep
 
 Let $w_t \sim \mathcal{N}(0,1)$ and $y_t = y_{t-1} - 0.9 y_{t-2} + w_t$ with $y_t = 0$ for $t < 1$.
 
-```{r}
+```{r warning=FALSE, message=FALSE}
 ar = data_frame(
   t = 1:500,
   w = rnorm(500),
@@ -150,7 +150,7 @@ Oscillating pattern driven by the -0.9 in formula for $y_t$.
 
 Wine sales per month for 15 years. 
 
-```{r}
+```{r warning=FALSE, message=FALSE}
 aus_wine = forecast::wineind
 
 aus_wine=data.frame(date=time(aus_wine), sales=as.matrix(aus_wine)) 
@@ -161,7 +161,7 @@ aus_wine %>%
   geom_point()
 ```
 
-```{r}
+```{r warning=FALSE, message=FALSE}
 l  = lm(sales ~ date, data=aus_wine)
 l2 = lm(sales ~ date + I(date^2), data=aus_wine)
 
@@ -179,7 +179,7 @@ d %>%
   labs(title = "Model Fit")
 ```
 
-```{r}
+```{r warning=FALSE, message=FALSE}
 d = aus_wine %>%
   modelr::add_residuals(l, var="lin_resid") %>%
   modelr::add_residuals(l2, var="quad_resid")
@@ -195,13 +195,13 @@ ggplot(aes(x=date, y=residual, color=type)) +
 
 There is definitely structure, very similar to the one we see in the EDA (yearly patterns).
 
-```{r}
+```{r warning=FALSE, message=FALSE}
 forecast::ggtsdisplay(d$quad_resid, lag.max = 36)
 ```
 
 We see that there are high correlations at lag 12, 24, 36, etc. --> corresponding to every 12 months 
 
-```{r warning = FALSE}
+```{r warning=FALSE, message=FALSE}
 d_lags = bind_cols(
   d,
   purrr::map_dfc(0:12, ~ list(lag = lag(d$quad_resid, n=.x))) %>% select(-lag)
@@ -218,3 +218,44 @@ ggplot(d_lags, aes(x=lag_value, y=quad_resid)) +
 
 Very linear trend at lag 12, but not much of a trend at lags 1-11. 
 
+## Autoregressive Errors
+
+```{r warning=FALSE, message=FALSE}
+# fitting model where lag12 is a predictor
+d_ar = mutate(d, lag_12 = lag(quad_resid, 12))
+l_ar = lm(quad_resid ~ lag_12, data=d_ar)
+summary(l_ar)
+```
+
+```{r message=FALSE, warning = FALSE}
+d_ar = d_ar %>%
+  modelr::add_residuals(l_ar)
+
+d_ar %>%
+  ggplot(aes(x=date, y=resid)) +
+  geom_point() + 
+  geom_line() + 
+  labs(title = "Residuals of lag-12 Residuals")
+
+forecast::ggtsdisplay(l_ar$residuals, lag.max = 36)
+```
+
+Still autocorrelation in the residuals (big peaks at 12 months, but still smaller than before), but no addition pattern (nothing at 24 or 36)
+
+
+```{r warning=FALSE, message=FALSE}
+bind_cols(
+  d_ar %>%
+    modelr::add_residuals(l_ar) %>%
+    select(-lag_12, -lin_resid, -quad_resid),
+  purrr::map_dfc(0:12, ~ list(lag = lag(d_ar$resid, n=.x))) %>% select(-lag)
+) %>%
+  tidyr::gather(lag, lag_value, -(date:resid)) %>%
+  mutate(lag = forcats::as_factor(lag)) %>%
+  ggplot(aes(x=lag_value, y=resid)) +
+    geom_point() +
+    facet_wrap(~lag, ncol=4) +
+    geom_smooth(method="lm", color='red', se = FALSE, alpha=0.1)
+```
+
+The lag-12 structure is not there as much anymore (except for the one influential point).
