@@ -40,7 +40,7 @@ ggplot(sleep, aes(x = Days, y = Reaction)) +
   facet_wrap(~Subject)
 ```
 
-![](Lec4_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
+![](Lec5_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
 
 Seems there are a couple outliers (308, 332).
 
@@ -100,7 +100,7 @@ tidybayes::gather_draws(sleep_samp, beta[i], sigma) %>%
   facet_grid(param~., scales = "free_y")
 ```
 
-![](Lec4_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
+![](Lec5_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
 
 Diagnostic plots look good.
 
@@ -125,7 +125,7 @@ ggplot(sleep, aes(x=Days, y=Reaction)) +
   facet_wrap(~Subject)
 ```
 
-![](Lec4_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
+![](Lec5_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
 
 Using `y_pred` (where we expect points to fall, prediction interval
 equivalent), not `y_hat` (where we expect line to fall, confidence
@@ -144,7 +144,7 @@ sleep_lm_pred %>%
   guides(color=FALSE)
 ```
 
-![](Lec4_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
+![](Lec5_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
 
 Not great
 
@@ -288,7 +288,7 @@ tidybayes::gather_draws(samps_ri, beta, sigma, theta_alpha, sigma_alpha) %>%
   facet_grid(.variable~., scale = "free_y")
 ```
 
-![](Lec4_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
+![](Lec5_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
 
 ``` r
 tidybayes::gather_draws(samps_ri, alpha[j]) %>%
@@ -300,7 +300,7 @@ tidybayes::gather_draws(samps_ri, alpha[j]) %>%
   facet_wrap(param~., scales = "free_y")
 ```
 
-![](Lec4_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
+![](Lec5_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
 
 ``` r
 tidybayes::gather_draws(samps_ri, alpha[j]) %>%
@@ -310,7 +310,7 @@ tidybayes::gather_draws(samps_ri, alpha[j]) %>%
   labs(title = "Distibution of Random Effects")
 ```
 
-![](Lec4_files/figure-gfm/unnamed-chunk-14-2.png)<!-- -->
+![](Lec5_files/figure-gfm/unnamed-chunk-14-2.png)<!-- -->
 
 #### Model Fit
 
@@ -332,7 +332,7 @@ ggplot(sleep, aes(x = Days, y = Reaction)) +
   facet_wrap(~Subject)
 ```
 
-![](Lec4_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
+![](Lec5_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
 
 Model fit looks much better (compare 309)
 
@@ -349,7 +349,7 @@ sleep_ri_pred %>%
   guides(color=FALSE)
 ```
 
-![](Lec4_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
+![](Lec5_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
 
 Residuals looks better (compare 309)
 
@@ -454,7 +454,7 @@ bind_rows(
       labs(y="Reaction")
 ```
 
-![](Lec4_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
+![](Lec5_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
 
 ``` r
 bind_rows(
@@ -491,4 +491,4 @@ bind_rows(
     ## This warning is displayed once every 8 hours.
     ## Call `lifecycle::last_warnings()` to see where this warning was generated.
 
-![](Lec4_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
+![](Lec5_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
