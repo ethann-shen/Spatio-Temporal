@@ -1,0 +1,288 @@
+---
+title: "Lecture 7 - Differencing and AR(1) Models"
+author: "Ethan Shen"
+date: "5/16/2020"
+output: 
+  html_document:
+    keep_md: TRUE
+---
+
+```{r config, include=FALSE}
+ggplot2::theme_set(ggplot2::theme_bw())
+```
+
+```{r warning=FALSE, message=FALSE}
+library(dplyr)
+library(ggplot2)
+library(forecast)
+```
+
+# Lagged Predictors and CCFs
+
+SOI is indicator of development and intensity of El Niño (negative SOI) or La Niña (positive SOI).
+
+```{r warning=FALSE, message=FALSE}
+library(astsa)
+fish = data_frame(
+  date = time(astsa::soi),
+  soi = astsa::soi,
+  recruitment = astsa::rec
+)
+fish
+```
+
+```{r warning=FALSE, message=FALSE}
+fish %>%
+  tidyr::gather(Variables, value, -date) %>%
+  ggplot(aes(x=date, y=value, color=Variables)) +
+  geom_line() +
+  facet_wrap(~Variables, nrow=2, scale="free_y") +
+  ylab("")
+```
+
+No super obvious cyclical pattern, longer periods of time (not necessarily by year)
+
+```{r warning=FALSE, message=FALSE}
+fish %>%
+  ggplot(aes(x=soi, y=recruitment)) +
+  geom_point() + 
+  geom_smooth(color="red", alpha=0.5, se=FALSE) + 
+  labs(title = "Recruitment vs SOI")
+```
+
+```{r}
+forecast::ggtsdisplay(fish$soi, lag.max = 36)
+```
+
+Pretty obvious patterns in the ACF, but unsure what is causing these patterns. 
+
+
+```{r}
+forecast::ggtsdisplay(fish$recruitment, lag.max = 36)
+```
+
+Very strong autocorrelation at one month, pretty strong anti-autocorrelation at two months. 
+
+## Cross Correlation Function
+
+The correlation between two time series. 
+
+```{r}
+with(fish, forecast::ggCcf(soi, recruitment))
+```
+
+```{r warning=FALSE, message=FALSE}
+fish_lags = fish %>%
+  mutate(
+    "lag 0" = lag(as.vector(soi),0),
+    "lag 1" = lag(as.vector(soi),1),
+    "lag 2" = lag(as.vector(soi),2),
+    "lag 3" = lag(as.vector(soi),3),
+    "lag 4" = lag(as.vector(soi),4),
+    "lag 5" = lag(as.vector(soi),5),
+    "lag 6" = lag(as.vector(soi),6),
+    "lag 7" = lag(as.vector(soi),7),
+    "lag 8" = lag(as.vector(soi),8),
+    "lag 9" = lag(as.vector(soi),9),
+    "lag 10" = lag(as.vector(soi),10),
+    "lag 11" = lag(as.vector(soi),11)
+  ) 
+
+corrs = fish_lags %>%
+  select(-soi, -date) %>%
+  tidyr::gather(lag, soi, -recruitment) %>%
+  group_by(lag) %>%
+  summarize(corr = cor(soi, recruitment, use="complete.obs"))
+
+fish_lags %>%
+  select(-soi, -date) %>%
+  tidyr::gather(lag, soi, -recruitment) %>%
+  ggplot(aes(x=soi, y=recruitment)) +
+  geom_point(alpha=0.3) +
+  facet_wrap(~forcats::as_factor(lag)) +
+  #geom_line(stat="smooth", method="loess", color='red',  size=1.2, alpha=0.75) +
+  geom_line(stat="smooth", method="lm",    color="blue", size=1.2, alpha=0.75) +
+  geom_text(data=corrs, aes(x=-0.85, y=5, label=round(corr,3)), size=3)
+```
+
+Strong autocorrelations in lag 6 and 7 correspond with CCF plot from above (at -6 and -7).
+
+## Models with Lag 
+
+```{r}
+model1 = lm(recruitment~lag(as.vector(soi),6), data=fish)
+model2 = lm(recruitment~lag(as.vector(soi),6)+lag(as.vector(soi),7), data=fish)
+model3 = lm(recruitment~lag(as.vector(soi),5)+lag(as.vector(soi),6)+lag(as.vector(soi),7)+lag(as.vector(soi),8), data=fish)
+
+summary(model3)
+```
+
+## Prediction
+
+```{r warning=FALSE, message=FALSE}
+fish %>%
+  modelr::add_predictions(., model1, var = paste0("Model 1 - soi lag 6 (RMSE: ",        round(modelr::rmse(model1,.),1),")")) %>%
+  modelr::add_predictions(., model2, var = paste0("Model 2 - soi lags 6,7 (RMSE: ",     round(modelr::rmse(model2,.),1),")")) %>%
+  modelr::add_predictions(., model3, var = paste0("Model 3 - soi lags 5,6,7,8 (RMSE: ", round(modelr::rmse(model3,.),1),")")) %>%
+  tidyr::gather(model, pred, -(date:recruitment)) %>%
+  ggplot(aes(x=date,y=recruitment)) +
+  geom_line() +
+  geom_line(aes(y=pred), col="red") +
+  facet_wrap(~model,nrow=3)
+```
+
+More predictors: we are doing better in terms of RMSE (only marginally better than the original RMSE of 22.4)
+
+## Residual ACF - Model 3
+
+```{r}
+forecast::ggtsdisplay(residuals(model3))
+```
+
+Residual pattern is still structured. Looking at PACF, we see autocorrelation at lag 1, anti-correlation at lag 2. Might be good to add more levels of autocorrelation (at t1 and t2) 
+
+## Autoregressive Model 1
+
+```{r}
+model4 = lm(recruitment~lag(as.vector(recruitment), 1) + lag(as.vector(recruitment), 2) + lag(as.vector(soi),5)+lag(as.vector(soi),6)+lag(as.vector(soi),7)+lag(as.vector(soi),8), data=fish)
+summary(model4)
+```
+
+Lags 7 and 8 for SOI don't seem important, so we can drop them. 
+
+## Autoregressive Model 2
+
+```{r}
+model5 = lm(recruitment~lag(as.vector(recruitment), 1) + lag(as.vector(recruitment), 2) + lag(as.vector(soi),5)+lag(as.vector(soi),6), data=fish)
+summary(model5)
+```
+
+## Prediction of New Models
+
+```{r message=FALSE, warning=FALSE}
+fish %>%
+  modelr::add_predictions(., model3, var = paste0("Model 3 - soi lags 5,6,7,8 (RMSE: ",        round(modelr::rmse(model3,.),2),")")) %>%
+  modelr::add_predictions(., model4, var = paste0("Model 4 - AR(2); soi lags 5,6,7,8 (RMSE: ", round(modelr::rmse(model4,.),2),")")) %>%
+  modelr::add_predictions(., model5, var = paste0("Model 5 - AR(2); soi lags 5,6 (RMSE: ",     round(modelr::rmse(model5,.),2),")")) %>%
+  tidyr::gather(model, pred, -(date:recruitment)) %>%
+  ggplot(aes(x=date,y=recruitment)) +
+  geom_line() +
+  geom_line(aes(y=pred), col="red") +
+  facet_wrap(~model,nrow=3)
+```
+
+AR models fall down in prediction. As soon as we predict past our data, AR models struggle. 
+
+## Residual ACF - Model 5
+
+```{r}
+forecast::ggtsdisplay(residuals(model5))
+```
+
+ACF and PACF looks much better. 
+
+# AR(1) Models
+
+$$Random \, Walk: y_t = \delta + y_{t-1} + w_t$$ 
+
+$$AR(1):  y_t = \delta + \phi \, y_{t-1} + w_t $$
+
+What does the choice of $\phi$ do for our random walk? 
+
+```{r}
+delta = 0.1
+phi1 = 0.9
+phi2 = 1.01
+
+ar1 = data_frame(
+  t = 1:500,
+  y1 = 0,
+  y2 = 0,
+  y3 = 0
+)
+
+for(t in 2:nrow(ar1))
+{
+  ar1$y1[t] = delta + phi1 * ar1$y1[t-1] + rnorm(1)
+  ar1$y2[t] = delta + ar1$y2[t-1] + rnorm(1)
+  ar1$y3[t] = delta + phi2 * ar1$y3[t-1] + rnorm(1)
+}
+
+ar1 %>%
+  rename(
+    "AR(1) w/ phi = 0.9" = y1,
+    "AR(1) w/ phi = 1" = y2,
+    "AR(1) w/ phi = 1.01" = y3
+  ) %>%
+  tidyr::gather(model, y, -t) %>%
+  ggplot(aes(x=t,y=y)) +
+  geom_line() +
+  labs(title = expression(paste("Positive ", phi))) + 
+  facet_grid(model~., scale="free_y") 
+```
+
+```{r}
+delta = 0.1
+phi1 = 0.9
+phi2 = 1.01
+
+ar1 = data_frame(
+  t = 1:500,
+  y1 = 0,
+  y2 = 0,
+  y3 = 0
+)
+
+for(t in 2:nrow(ar1))
+{
+  ar1$y1[t] = delta - phi1 * ar1$y1[t-1] + rnorm(1)
+  ar1$y2[t] = delta - ar1$y2[t-1] + rnorm(1)
+  ar1$y3[t] = delta - phi2 * ar1$y3[t-1] + rnorm(1)
+}
+
+ar1 %>%
+  rename(
+    "AR(1) w/ phi = 0.9" = y1,
+    "AR(1) w/ phi = -1" = y2,
+    "AR(1) w/ phi = -1.01" = y3
+  ) %>%
+  tidyr::gather(model, y, -t) %>%
+  ggplot(aes(x=t,y=y)) +
+  geom_line() +
+  labs(title = expression(paste("Negative ", phi))) + 
+  facet_grid(forcats::as_factor(model)~., scale="free_y") 
+```
+
+Seems that $|\phi| > 1$ causes big issues. $\phi = 1$ is not stationary, $\phi = -1$ maybe?
+
+## Example of AR(1) Processes 
+
+```{r warning=FALSE, message=FALSE}
+sims = data_frame(
+  t = 1:100,
+  "phi = -0.9" = arima.sim(n = 100, list(ar = -0.9)),
+  "phi = -0.5" = arima.sim(n = 100, list(ar = -0.5)), 
+  "phi = 0.5" = arima.sim(n = 100, list(ar =  0.5)), 
+  "phi = 0.9" = arima.sim(n = 100, list(ar =  0.9))
+)
+
+sims %>%
+  tidyr::gather(model, vals, -t) %>%
+  ggplot(aes(x=t, y=vals)) +
+    geom_line() +
+    facet_wrap(~model)
+```
+
+## Identifying AR(1) Processes - ACFs
+
+```{r}
+par(mfrow=c(2,4))
+forecast::Acf(sims$`phi = -0.5`)
+forecast::Acf(sims$`phi = -0.9`)
+forecast::Acf(sims$`phi = 0.5`)
+forecast::Acf(sims$`phi = 0.9`)
+forecast::Pacf(sims$`phi = -0.5`)
+forecast::Pacf(sims$`phi = -0.9`)
+forecast::Pacf(sims$`phi = 0.5`)
+forecast::Pacf(sims$`phi = 0.9`)
+```
