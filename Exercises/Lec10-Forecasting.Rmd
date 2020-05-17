@@ -1,0 +1,163 @@
+---
+title: "Lecture 10 - Forecasting and Fitting ARIMA Models"
+author: "Ethan Shen"
+date: "5/17/2020"
+output: 
+  html_document:
+    keep_md: TRUE
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+ggplot2::theme_set(ggplot2::theme_bw())
+```
+
+# AR(1) Example
+
+$\phi = 0.75$, $\delta=0.5$, and $\sigma_w^2=1$,
+
+```{r}
+ar1 = arima.sim(n=1000, model = list(order=c(1,0,0), ar=0.75), mean=0.5)
+forecast::ggtsdisplay(ar1)
+```
+
+### Using ARIMA function
+
+```{r}
+ar1_arima = forecast::Arima(ar1, order = c(1,0,0)) 
+summary(ar1_arima)
+```
+
+The "mean" reported by the `ARIMA` model is $E(y_t) = \frac{\delta}{1-\phi}$.
+
+### Using lm() function
+
+```{r}
+d = data_frame(y = ar1, t=seq_along(ar1))
+ar1_lm = lm(y~lag(as.vector(y)), data=d)
+summary(ar1_lm)
+```
+
+We see the coefficients for `ar1` and `lag(y)` are very very similar. 
+
+
+# Bayesian AR(1) Model 
+
+Model follows decomposition of multivariate normal density into product of conditional densities.
+
+```{r}
+ar1_model = "model{
+# likelihood
+  y[1] ~ dnorm(delta/(1-phi), (sigma2w/(1-phi^2))^-1) # taking inverse of variance bc JAGS takes precision, not variance
+   
+   # posterior predictive
+  y_hat[1] ~ dnorm(delta/(1-phi), (sigma2w/(1-phi^2))^-1)
+
+ # conditional likelihoods
+  for (t in 2:length(y)) {
+    y[t] ~ dnorm(delta + phi*y[t-1], 1/sigma2w)
+    y_hat[t] ~ dnorm(delta + phi*y[t-1], 1/sigma2w)
+  }
+  
+  # expected value of y_t
+  mu = delta/(1-phi)
+
+# priors
+  delta ~ dnorm(0,1/1000)
+   # could be problematic bc model might not be stationary (in this case, we know the model is stationary, so not an issue)
+  # however, if we don't know whether or not model is stationary, the mean and variance of y_t is not what we coded, because those are derived after assuming process is stationary
+  
+  phi ~ dnorm(0,1)
+  tau ~ dgamma(0.001,0.001)
+  sigma2w <- 1/tau
+}"
+
+m_ar1 = rjags::jags.model(textConnection(ar1_model),
+                          data = list(y=ar1))
+
+update(m_ar1, n.iter = 1000)
+
+samp_ar1 = rjags::coda.samples(m_ar1, n.iter = 5000,
+                               variable.names = c("delta", "phi", "sigma2w", "mu", "y_hat"))
+```
+
+### MCMC Diagnostics
+
+```{r}
+tidybayes::gather_draws(samp_ar1, delta, phi, sigma2w) %>%
+  ggplot(aes(x = .iteration, y = .value, color = as.factor(.variable))) + 
+  geom_line(alpha = 0.8) + 
+  facet_wrap(~.variable, ncol=1, scales = "free_y") + 
+  labs(color = "Parameter")
+```
+
+## Posterior Density & Comparison to ARIMA fit and lm() fit
+
+```{r}
+ar1_res = bind_rows(
+  data_frame(
+    model = "truth",
+    term = c("delta", "phi", "sigma2_w"), 
+    .value = c(0.5, 0.75, 1)
+  ),
+  data_frame(
+    model = "lm",
+    term = c("delta", "phi", "sigma2_w"), 
+    .value = c(coef(ar1_lm), var(ar1_lm$residuals))
+  ),
+  data_frame(
+    model = "ARIMA",
+    term = c("delta", "phi", "sigma2_w"), 
+    .value = c(ar1_arima$model$phi, (1-ar1_arima$model$phi)*ar1_arima$coef[2], ar1_arima$sigma2)
+  )
+)
+
+tidybayes::gather_draws(samp_ar1, delta, phi, sigma2w) %>%
+  ggplot(aes(x=.value)) +
+  geom_density(fill="lightgrey") +
+  geom_vline(data=ar1_res, aes(xintercept = .value, linetype=model, color=model), size=1.5, alpha=0.75) +
+  facet_wrap(~term, ncol=3, scales = "free_x")
+```
+
+We see that $\sigma^2$ is predicted pretty well, others not so much. 
+
+## Predictions
+
+```{r warning=FALSE}
+models = d %>% 
+  modelr::add_predictions(ar1_lm,var = "lm") %>%
+  mutate(
+    ARIMA = ar1_arima %>% fitted(),
+    bayes = tidybayes::gather_draws(samp_ar1, y_hat[i]) %>%  summarize(post_mean = mean(.value)) %>% pull(post_mean)
+  ) %>%
+  tidyr::gather(model, y, -t)
+
+gridExtra::grid.arrange(
+  models %>%
+    filter(model=="y" | model=="lm") %>%
+    ggplot(aes(x=t, y=y, color=forcats::as_factor(model))) +
+    geom_line(alpha=0.75) +
+    scale_color_manual(values=c("black", "red")) +
+    labs(color="Model")
+  ,
+  models %>%
+    filter(model=="y" | model=="bayes") %>%
+    ggplot(aes(x=t, y=y, color=forcats::as_factor(model))) +
+    geom_line(alpha=0.75) +
+    scale_color_manual(values=c("black", "light blue")) +
+    labs(color="Model")
+  ,
+  models %>%
+    filter(model=="y" | model=="ARIMA") %>%
+    ggplot(aes(x=t, y=y, color=forcats::as_factor(model))) +
+    geom_line(alpha=0.75) +
+    scale_color_manual(values=c("black", "light green")) +
+    labs(color="Model")
+)
+```
+
+We see the predictions (ARIMA, lm, and Bayesian) are all very similar to the truth.
+
+
+
+

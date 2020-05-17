@@ -1,0 +1,239 @@
+---
+title: "Lecture 4 - GLMs + Residual Analysis"
+author: "Ethan Shen"
+date: "5/17/2020"
+output: 
+  html_document:
+    keep_md: TRUE
+---
+
+```{r setup message=FALSE, warning=FALSE}
+library(tidyverse)
+ggplot2::theme_set(ggplot2::theme_bw())
+```
+
+```{r warning=FALSE}
+load("data/anguilla.Rdata")
+set.seed(20180130)
+
+part = modelr::resample_partition(anguilla, c(train=0.75, test=0.25))
+
+anguilla = as.data.frame(part$train) %>% as_tibble()
+anguilla_test = as.data.frame(part$test) %>% as_tibble()
+```
+
+# Simple Model 
+
+```{r}
+g = glm(presence ~ SegSumT, family=binomial, data=anguilla)
+summary(g)
+```
+
+### Model Fit 
+
+```{r}
+inv_logit = function(x) 1/(1+exp(-x))
+
+d_g = anguilla %>%
+  mutate(p_hat = predict(g, anguilla, type="response"))
+
+d_g_pred = data.frame(SegSumT = seq(11,25,by=0.1)) %>% 
+  modelr::add_predictions(g,"p_hat") %>%
+  mutate(p_hat = inv_logit(p_hat))
+```
+
+```{r}
+ggplot(anguilla, aes(x=SegSumT, y=presence)) +
+  geom_point(alpha=0.5) +
+  geom_line(data=d_g_pred, aes(y=p_hat), color="red")
+```
+
+Not doing great. 
+
+### Separation
+
+```{r}
+ggplot(d_g, aes(x=p_hat, y=presence, color=as.factor(presence))) +
+  geom_point(alpha=0.5) +
+  labs(color="presence")
+```
+
+### Residuals 
+
+```{r}
+d_g = d_g %>%
+  mutate(resid = resid(g))
+
+ggplot(d_g, aes(x = SegSumT, y=resid, color=as.factor(presence))) + 
+  geom_point(alpha=0.3) + 
+  geom_hline(yintercept = 0, color="red")
+```
+
+A normal residual plot isn't super informative for GLMs. 
+
+### Binned Residuals 
+
+```{r}
+d_g %>%
+  mutate(bin = p_hat - (p_hat %% 0.01)) %>%
+  group_by(bin) %>%
+  summarize(resid_mean = mean(resid)) %>%
+  ggplot(aes(y=resid_mean, x=bin)) +
+  geom_point() + 
+  geom_hline(yintercept = 0, color="red")
+```
+
+### Pearson Residuals 
+
+```{r}
+d_g = d_g %>% mutate(pearson = (presence - p_hat) / (p_hat * (1-p_hat)))
+ggplot(d_g, aes(x=p_hat, y=pearson, color=as.factor(presence))) + 
+  geom_point(alpha=0.3) + 
+  geom_hline(yintercept = 0, color="red")
+```
+
+### Binned Pearson Residuals 
+
+```{r}
+d_g %>%
+  mutate(bin = p_hat - (p_hat %% 0.01)) %>%
+  group_by(bin) %>%
+  summarize(pearson_mean = mean(pearson)) %>%
+  ggplot(aes(y=pearson_mean, x=bin)) +
+  geom_point()
+```
+
+### Deviance Residuals 
+
+```{r}
+d_g = d_g %>%
+  mutate(deviance = sign(presence - p_hat) *sqrt(-2 * (presence*log(p_hat) + (1-presence)*log(1 - p_hat) )))
+ggplot(d_g, aes(x=p_hat, y=deviance)) +
+  geom_point(alpha=0.1) 
+sum(d_g$deviance^2)
+```
+
+### Binned Deviance Residuals
+
+```{r}
+d_g %>%
+  mutate(bin = p_hat - (p_hat %% 0.01)) %>%
+  group_by(bin) %>%
+  summarize(deviance_mean = mean(deviance)) %>%
+  ggplot(aes(y=deviance_mean, x=bin)) +
+  geom_point()
+```
+
+## Binned Residuals All Together
+
+```{r}
+d_g %>%
+  select(p_hat:deviance) %>%
+  mutate(bin = p_hat - (p_hat %% 0.01)) %>%
+  tidyr::gather(type, value, -p_hat, -bin) %>%
+  mutate(type = as_factor(type)) %>%
+  group_by(type, bin) %>%
+  summarize(mean = mean(value)) %>%
+  ggplot(aes(x = bin, y = mean, color = type)) + 
+  geom_point() + 
+  facet_wrap(~type, ncol=1, scale="free_y")
+```
+
+Pearson and Deviance residuals are fine, should not use regular residuals. 
+
+# Full Model 
+
+```{r}
+f = glm(presence~., family=binomial, data=anguilla)
+summary(f)
+```
+
+### Residuals vs. Fitted 
+
+```{r}
+d_f = anguilla %>%
+  mutate(p_hat = predict(f, anguilla, type="response")) %>%
+  mutate(
+    resid = presence - p_hat,
+    pearson = (presence - p_hat) / (p_hat * (1-p_hat)),
+    deviance = sign(presence - p_hat) *sqrt(-2 * (presence*log(p_hat) + (1-presence)*log(1 - p_hat) ))
+  ) %>%
+  mutate(bin = p_hat - (p_hat %% 0.025))
+
+d_f %>%
+  select(p_hat:bin) %>%
+  tidyr::gather(type, value, -p_hat, -bin) %>%
+  mutate(type = as_factor(type)) %>%
+  group_by(type, bin) %>%
+  summarize(mean = mean(value)) %>%
+  ggplot(aes(x=bin, y=mean, color=type)) +
+  geom_point() +
+  facet_wrap(~type, ncol=1, scale="free_y")
+```
+
+## Model Performance
+
+```{r}
+ggplot(d_f, aes(x=p_hat, y=presence, color=as.factor(presence))) +
+  geom_point(alpha=0.5) +
+  labs(color="presence", title="Full Model")
+```
+
+### ROC/AUC
+
+```{r}
+res_obs = bind_rows(
+  select(d_g, presence, p_hat) %>% mutate(model = "SegSumT Model"),
+  select(d_f, presence, p_hat) %>% mutate(model = "Full Model")
+)
+
+gg_roc = ggplot(res_obs, aes(d=presence, m=p_hat, color=model)) +
+    plotROC::geom_roc(n.cuts=0) +
+    plotROC::style_roc()
+
+auc = plotROC::calc_auc(gg_roc)["AUC"]
+   
+gg_roc +  
+  annotate(
+    "text", x = .75, y = .25, 
+    label = paste("AUC =", round(auc, 3))
+  )
+```
+
+### Out of Sample Predictive Performance
+
+```{r}
+full_res = anguilla_test %>% 
+  modelr::add_predictions(g,"SegSumT Model") %>%
+  modelr::add_predictions(f,"Full Model") %>%
+  select(presence, "SegSumT Model","Full Model") %>%
+  tidyr::gather(model, p_hat, -presence) %>%
+  mutate(p_hat = inv_logit(p_hat)) %>%
+  mutate(type = "Test") %>%
+  bind_rows(
+    res_obs %>% mutate(type = "Train"),
+    .
+  ) %>%
+  mutate(
+    model = forcats::as_factor(model),
+    type = forcats::as_factor(type)
+  )
+
+gg_roc = ggplot(full_res, aes(d=presence, m=p_hat, color=model, linetype=type)) +
+    plotROC::geom_roc(n.cuts=0) +
+    plotROC::style_roc()
+
+auc = plotROC::calc_auc(gg_roc)["AUC"]
+   
+gg_roc +  
+  annotate(
+    "text", x = .75, y = .25, 
+    label = paste("AUC =", round(auc, 3))
+  )
+```
+
+
+
+
+
+
