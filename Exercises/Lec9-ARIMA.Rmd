@@ -1,0 +1,257 @@
+---
+title: "Lecture 9 - ARIMA Models"
+author: "Ethan Shen"
+date: "5/16/2020"
+output: 
+  html_document:
+    keep_md: TRUE
+---
+
+```{r warning=FALSE, message=FALSE}
+library(tidyverse)
+ggplot2::theme_set(ggplot2::theme_bw())
+```
+
+# Differencing 
+
+### Stochastic Trend
+
+Let $y_t = \mu_t + w_t$ where $w_t$ is white noise and $\mu_t = \mu_{t-1} + v_t$ with $v_t$ stationary as well. 
+
+```{r warning=FALSE, message=FALSE}
+d = data_frame(
+  w=rnorm(300,0,1),
+  v=rnorm(300,0,1),
+  mu = 0,
+  y = 0
+)
+
+for(t in 2:300) {
+  d$mu[t] = d$mu[t-1] + d$v[t]
+  d$y[t] = d$mu[t] + d$w[t]
+}
+
+forecast::ggtsdisplay(d$y)
+```
+
+$y_t$ is non-stationary, not as obvious a pattern as the random walk. Seeing some type of "AR" pattern in the lag. 
+
+### Differenced Stochastic Trend
+
+```{r}
+forecast::ggtsdisplay(diff(d$y))
+```
+
+Seeing some type of "MA" structure in ACF and PACF. Calculated that differenced stochastic trend is **stationary**. 
+
+# ARIMA 
+
+## Random Walk with Drift 
+
+```{r warning=FALSE, message=FALSE}
+rwd = arima.sim(n=500, model=list(order=c(0,1,0)), mean=0.1) 
+
+# differenced once 
+forecast::Arima(rwd, order = c(0,1,0), include.constant = TRUE)
+```
+
+#### EDA 
+
+```{r warning=FALSE, message=FALSE}
+par(mfrow=c(2,2), mar=c(2,4,2,2))
+plot(rwd)
+forecast::Acf(rwd, main="")
+
+plot(diff(rwd))
+forecast::Acf(diff(rwd), main="")
+```
+
+Second row of plots are the differenced plots, stationary. 
+
+#### Over differencing
+
+```{r warning=FALSE, message=FALSE}
+par(mfrow=c(2,2), mar=c(2,4,2,2))
+plot(diff(rwd,2))
+forecast::Acf(diff(rwd,2), main="")
+plot(diff(rwd,3))
+forecast::Acf(diff(rwd,3), main="")
+```
+
+Once something is stationary, differencing it again does not make something non-stationary. There's no point in going past the first time, and may induce structure that wasn't originally there. 
+
+# AR or MA?
+
+```{r warning=FALSE, message=FALSE}
+ts1 = arima.sim(n=250, model=list(order=c(0,1,2), ma=c(0.4,0.5))) 
+ts2 = arima.sim(n=250, model=list(order=c(2,1,0), ar=c(0.4,0.5))) 
+
+par(mfrow=c(1,2), mar=c(2,4,2,2))
+plot(ts1)
+plot(ts2)
+```
+
+### EDA
+
+```{r warning=FALSE, message=FALSE}
+par(mfrow=c(2,3), mar=c(2,4,2,2))
+plot(ts1)
+forecast::Acf(ts1,main="")
+forecast::Pacf(ts1,main="")
+
+plot(ts2)
+forecast::Acf(ts2,main="")
+forecast::Pacf(ts2,main="")
+```
+
+Neither one is stationary. Seems like both have AR, but since neither time series is stationary, we can't use ACF or PACF to tell us much. 
+
+## `ts1` - Finding $d$
+
+```{r warning=FALSE, message=FALSE}
+par(mfrow=c(3,3), mar=c(2,4,2,2))
+
+plot(diff(ts1), main="d=1")
+plot(diff(ts1,2), main="d=2")
+plot(diff(ts1,3), main="d=3")
+forecast::Acf(diff(ts1), main="")
+forecast::Acf(diff(ts1,2), main="")
+forecast::Acf(diff(ts1,3), main="")
+forecast::Pacf(diff(ts1), main="")
+forecast::Pacf(diff(ts1,2), main="")
+forecast::Pacf(diff(ts1,3), main="")
+```
+
+Seems like first order difference is good enough. 
+
+For the first order difference, two peaks in ACF is indicates MA(2), three peaks in PACF is maybe AR(3)?
+
+## `ts2` - Finding $d$
+
+```{r warning=FALSE, message=FALSE}
+par(mfrow=c(3,3), mar=c(2,4,2,2))
+plot(diff(ts2), main="d=1")
+plot(diff(ts2,2), main="d=2")
+plot(diff(ts2,3), main="d=3")
+forecast::Acf(diff(ts2), main="")
+forecast::Acf(diff(ts2,2), main="")
+forecast::Acf(diff(ts2,3), main="")
+forecast::Pacf(diff(ts2), main="")
+forecast::Pacf(diff(ts2,2), main="")
+forecast::Pacf(diff(ts2,3), main="")
+```
+
+The structure doesn't go away. Additional levels of differencing won't do much, so we can just go with the first order difference. 
+
+For the first order difference, two big peaks in the PACF is indicative of AR(2) structure. 
+
+
+Generally, AR processes are easier to identify than MA processes. First tweak difference, then AR, lastly MA. 
+
+### Automatic Model Selection 
+
+`ts1`:
+```{r}
+forecast::auto.arima(ts1)
+```
+
+`ts2`:
+```{r}
+forecast::auto.arima(ts2)
+```
+
+# Real Time Series Example 
+
+### Data 
+
+```{r}
+data(elecequip, package = "fpp")
+elec_sales = forecast::seasadj(stl(elecequip, s.window="periodic"))
+
+forecast::tsdisplay(elec_sales, points=FALSE)
+```
+
+Definitely not stationary. 
+
+## 1st Order Differencing
+
+```{r}
+forecast::tsdisplay(diff(elec_sales, 1), points=FALSE)
+```
+
+Looking at ACF, we see initial negative correlation and then a positive one at lag 3. We can try an AR(3) to start. 
+
+## 2nd Order Differencing
+
+```{r}
+forecast::tsdisplay(diff(elec_sales, 2), points=FALSE)
+```
+
+Don't need second order differencing. 
+
+## 1st Model 
+
+```{r}
+forecast::Arima(elec_sales, order = c(3,1,0))
+```
+
+#### Residuals 
+
+```{r}
+forecast::Arima(elec_sales, order = c(3,1,0)) %>% 
+  residuals() %>%
+  forecast::tsdisplay(points=FALSE)
+```
+
+The residuals look fine, not much structure. 
+
+## Model Comparison 
+
+```{r}
+forecast::Arima(elec_sales, order = c(3,1,0))$aicc
+
+forecast::Arima(elec_sales, order = c(3,1,1))$aicc
+
+forecast::Arima(elec_sales, order = c(4,1,0))$aicc
+
+forecast::Arima(elec_sales, order = c(2,1,0))$aicc
+
+# auto-selection
+forecast::auto.arima(elec_sales)
+```
+
+We should still take ARIMA(3,1,0), because the additional MA step barely helps. 
+
+## Model Fit 
+
+```{r}
+plot(elec_sales, lwd=2, main = "Fitted (red)", col=adjustcolor("black", alpha.f=0.75)) 
+forecast::Arima(elec_sales, order = c(3,1,0)) %>% fitted() %>% 
+  lines(col=adjustcolor('red',alpha.f=0.75),lwd=2)
+```
+
+## Forecasting (Looking into the future)
+
+```{r}
+# prediction interval 
+forecast::Arima(elec_sales, order = c(3,1,0)) %>% 
+  forecast::forecast() %>% 
+  autoplot()
+```
+
+Forecasting into the future is never going to work well. 
+
+## Model Forecast - Zoom
+
+```{r message=FALSE, warning=FALSE}
+forecast::Arima(elec_sales, order = c(3,1,0)) %>% 
+  forecast::forecast() %>% 
+  autoplot() + xlim(2009,2014)
+```
+
+Flatlines really quickly because our ARIMA model is only dependent on 3 previous steps. 
+
+
+
+
+
