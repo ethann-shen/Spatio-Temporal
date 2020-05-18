@@ -252,6 +252,7 @@ arma22_model = "model{
 # Likelihood
   for (t in 1:length(y)) {
     y[t] ~ dnorm(mu[t], 1/sigma2_e)
+    y_hat[t] ~ dnorm(mu[t], 1/sigma2_e)
   }                    
   
   # estimating first two steps with latent errors 
@@ -287,7 +288,6 @@ arma22_model = "model{
 ## Bayesian Fit
 
 ```{r}
-
 if (!file.exists("arma22_coda.rds")) {
   m = rjags::jags.model(
     textConnection(arma22_model), 
@@ -298,7 +298,8 @@ if (!file.exists("arma22_coda.rds")) {
   update(m, n.iter=50000, progress.bar="none")
   
   arma22_coda = rjags::coda.samples(
-    m, variable.names=c("phi", "theta", "sigma2_w"), 
+    m, variable.names=c("phi", "theta", "sigma2_w", 
+                        "mu", "y", "y_hat"), 
     n.iter=50000, progress.bar="none", thin = 50
   )
   
@@ -318,12 +319,12 @@ arma22_res = bind_rows(
   data_frame(
     model = "Arima",
     term = c("phi[1]", "phi[2]", "theta[1]", "theta[2]"), 
-    estimate = c(1.3171,  -0.5142,  0.4332,  0.1651)
+    estimate = c(1.2843,  -0.5182,  0.4965,  0.2204)
   ),
   data_frame(
-    model = "HR",
+    model = "HR w_hat3",
     term = c("phi[1]", "phi[2]", "theta[1]", "theta[2]"), 
-    estimate = c(1.34414, -0.54288, 0.38065, 0.11431)
+    estimate = c(1.23758, -0.47868, 0.54084, 0.25991)
   )
 )
 
@@ -341,8 +342,8 @@ arma22_params %>%
   group_by(term) %>%
   slice(seq(1,n(),n()/200)) %>%
   ggplot(aes(x=.iteration, y=estimate, color=term)) +
-    geom_line() +
-    facet_grid(term~., scales = "free_y")
+  geom_line() +
+  facet_grid(term~., scales = "free_y")
 ```
 
 These are pretty hard to sample with JAGS. 
@@ -352,9 +353,46 @@ These are pretty hard to sample with JAGS.
 ```{r}
 arma22_params %>%
   ggplot(aes(x=estimate)) +
-    geom_density(fill="lightgrey") +
-    geom_vline(data=arma22_res, aes(xintercept = estimate, color=forcats::as_factor(model), linetype=forcats::as_factor(model)), size=1, alpha=0.5) +
-    facet_wrap(~term, ncol=2, scales = "free")
+  geom_density(fill="lightgrey") +
+  geom_vline(data=arma22_res, aes(xintercept = estimate, color=forcats::as_factor(model), 
+                                  linetype=forcats::as_factor(model)), size=1, alpha=0.5) +
+  labs(color="Model", linetype="Model") + 
+  facet_wrap(~term, ncol=2, scales = "free")
 ```
 
-All these predictions (ARIMA vs. HR) are all pretty similar to each other. Only Bayesian posterior that is struggling is $\theta_1$. 
+All these predictions (ARIMA vs. HR) are all pretty similar to each other. 
+
+### Predictions 
+
+```{r warning=FALSE}
+arma_models = data_frame(
+  t = seq_along(y),
+  ARIMA = forecast::Arima(y, order = c(2,0,2), include.mean = FALSE) %>% fitted(),
+  bayes = tidybayes::gather_draws(arma22_coda, y_hat[i]) %>%
+    ungroup() %>%
+    mutate(.variable = paste0(.variable,"[",i,"]")) %>%
+    group_by(.variable) %>%
+    summarize(post_mean = mean(.value)) %>%
+    pull(post_mean),
+  y = y
+) %>%
+  tidyr::gather(model, y, -t)
+gridExtra::grid.arrange(
+  arma_models %>%
+    filter(model=="y" | model=="bayes") %>%
+    ggplot(aes(x=t, y=y, color=forcats::as_factor(model))) +
+    geom_line(alpha=0.75) +
+    scale_color_manual(values=c("light blue","black")) +
+    labs(color="Model")
+  ,
+  arma_models %>%
+    filter(model=="y" | model=="ARIMA") %>%
+    ggplot(aes(x=t, y=y, color=forcats::as_factor(model))) +
+    geom_line(alpha=0.75) +
+    scale_color_manual(values=c("red", "black")) +
+    labs(color="Model")
+)
+```
+
+We see that the Bayesian model is struggling. 
+

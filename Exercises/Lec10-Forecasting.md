@@ -35,17 +35,17 @@ summary(ar1_arima)
 ## 
 ## Coefficients:
 ##          ar1    mean
-##       0.7514  1.7887
-## s.e.  0.0209  0.1300
+##       0.7720  1.9580
+## s.e.  0.0202  0.1372
 ## 
-## sigma^2 estimated as 1.054:  log likelihood=-1444.47
-## AIC=2894.93   AICc=2894.95   BIC=2909.65
+## sigma^2 estimated as 0.987:  log likelihood=-1411.85
+## AIC=2829.69   AICc=2829.72   BIC=2844.42
 ## 
 ## Training set error measures:
-##                        ME     RMSE       MAE       MPE     MAPE      MASE
-## Training set -0.002122881 1.025429 0.8274295 -4293.926 4519.452 0.9468485
-##                      ACF1
-## Training set -0.007473343
+##                        ME      RMSE       MAE      MPE     MAPE      MASE
+## Training set -0.001335972 0.9924843 0.7977374 8.168087 126.4885 0.9438618
+##                     ACF1
+## Training set -0.04635963
 ```
 
 The "mean" reported by the `ARIMA` model is $E(y_t) = \frac{\delta}{1-\phi}$.
@@ -66,19 +66,19 @@ summary(ar1_lm)
 ## 
 ## Residuals:
 ##      Min       1Q   Median       3Q      Max 
-## -3.11107 -0.69229  0.01323  0.69632  2.70814 
+## -3.06398 -0.70133 -0.02532  0.71898  3.07995 
 ## 
 ## Coefficients:
 ##                   Estimate Std. Error t value Pr(>|t|)    
-## (Intercept)        0.44204    0.04972   8.891   <2e-16 ***
-## lag(as.vector(y))  0.75097    0.02097  35.809   <2e-16 ***
+## (Intercept)        0.44385    0.05028   8.828   <2e-16 ***
+## lag(as.vector(y))  0.77224    0.02025  38.143   <2e-16 ***
 ## ---
 ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 ## 
-## Residual standard error: 1.026 on 997 degrees of freedom
+## Residual standard error: 0.9937 on 997 degrees of freedom
 ##   (1 observation deleted due to missingness)
-## Multiple R-squared:  0.5626,	Adjusted R-squared:  0.5621 
-## F-statistic:  1282 on 1 and 997 DF,  p-value: < 2.2e-16
+## Multiple R-squared:  0.5934,	Adjusted R-squared:  0.593 
+## F-statistic:  1455 on 1 and 997 DF,  p-value: < 2.2e-16
 ```
 
 We see the coefficients for `ar1` and `lag(y)` are very very similar. 
@@ -253,17 +253,17 @@ forecast::Arima(y, order = c(2,0,2), include.mean = FALSE) %>% summary()
 ## 
 ## Coefficients:
 ##          ar1      ar2     ma1     ma2
-##       1.2791  -0.4555  0.4522  0.1921
-## s.e.  0.0858   0.0785  0.0902  0.0736
+##       1.2683  -0.4431  0.5711  0.2015
+## s.e.  0.0844   0.0778  0.0905  0.0711
 ## 
-## sigma^2 estimated as 1:  log likelihood=-709.29
-## AIC=1428.57   AICc=1428.69   BIC=1449.65
+## sigma^2 estimated as 0.9282:  log likelihood=-690.7
+## AIC=1391.41   AICc=1391.53   BIC=1412.48
 ## 
 ## Training set error measures:
-##                       ME      RMSE       MAE       MPE     MAPE      MASE
-## Training set 0.004646019 0.9962157 0.7979356 -47.45931 124.1918 0.6629925
-##                      ACF1
-## Training set -0.005743304
+##                      ME      RMSE       MAE      MPE     MAPE     MASE
+## Training set 0.00995601 0.9595824 0.7739316 38.02223 97.34344 0.654686
+##                     ACF1
+## Training set 0.002333951
 ```
 
 $\theta$ generally harder to estimate, but all estimates are relatively close to true values. 
@@ -281,21 +281,21 @@ lm(y ~ lag(as.vector(y),1) + lag(as.vector(y),2)) %>% summary()
 ## lm(formula = y ~ lag(as.vector(y), 1) + lag(as.vector(y), 2))
 ## 
 ## Residuals:
-##     Min      1Q  Median      3Q     Max 
-## -3.3314 -0.7340 -0.0014  0.6936  3.3618 
+##      Min       1Q   Median       3Q      Max 
+## -2.87686 -0.69232 -0.05779  0.70634  2.67021 
 ## 
 ## Coefficients:
 ##                      Estimate Std. Error t value Pr(>|t|)    
-## (Intercept)           0.01260    0.04597   0.274    0.784    
-## lag(as.vector(y), 1)  1.56194    0.03187  49.008   <2e-16 ***
-## lag(as.vector(y), 2) -0.70395    0.03178 -22.153   <2e-16 ***
+## (Intercept)           0.01413    0.04579   0.309    0.758    
+## lag(as.vector(y), 1)  1.59112    0.03097  51.381   <2e-16 ***
+## lag(as.vector(y), 2) -0.72685    0.03103 -23.423   <2e-16 ***
 ## ---
 ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 ## 
-## Residual standard error: 1.026 on 495 degrees of freedom
+## Residual standard error: 1.022 on 495 degrees of freedom
 ##   (2 observations deleted due to missingness)
-## Multiple R-squared:  0.9193,	Adjusted R-squared:  0.9189 
-## F-statistic:  2818 on 2 and 495 DF,  p-value: < 2.2e-16
+## Multiple R-squared:  0.928,	Adjusted R-squared:  0.9277 
+## F-statistic:  3191 on 2 and 495 DF,  p-value: < 2.2e-16
 ```
 
 These are estimates of $\phi_1$ and $\phi_2$. However, we can't do `lag(w_t)` in a simple `lm` model. 
@@ -317,21 +317,13 @@ ar_yw
 ## 
 ## Coefficients:
 ##       1        2        3  
-##  1.5581  -0.7799   0.0867  
+##  1.7623  -1.1452   0.2836  
 ## 
-## Order selected 3  sigma^2 estimated as  1.299
+## Order selected 3  sigma^2 estimated as  1.055
 ```
 
 ```r
 ar_mle=ar.mle(y, order.max=10)
-```
-
-```
-## Warning in arima0(x, order = c(i, 0L, 0L), include.mean = demean): possible
-## convergence problem: optim gave code = 1
-```
-
-```r
 ar_mle
 ```
 
@@ -341,10 +333,10 @@ ar_mle
 ## ar.mle(x = y, order.max = 10)
 ## 
 ## Coefficients:
-##       1        2        3        4        5  
-##  1.7326  -1.0692   0.1797   0.1247  -0.0886  
+##       1        2        3  
+##  1.8248  -1.2436   0.3268  
 ## 
-## Order selected 5  sigma^2 estimated as  0.9886
+## Order selected 3  sigma^2 estimated as  0.9236
 ```
 
 ## Step 3
@@ -370,22 +362,22 @@ d = data_frame(
 ## 
 ## Residuals:
 ##      Min       1Q   Median       3Q      Max 
-## -3.15879 -0.70605 -0.00185  0.66505  2.97365 
+## -2.80953 -0.70658 -0.04443  0.68182  2.92435 
 ## 
 ## Coefficients:
 ##                           Estimate Std. Error t value Pr(>|t|)    
-## (Intercept)                0.01205    0.04531   0.266     0.79    
-## lag(as.vector(y), 1)       1.31249    0.07155  18.345  < 2e-16 ***
-## lag(as.vector(y), 2)      -0.48682    0.06272  -7.762 4.94e-14 ***
-## lag(as.vector(w_hat1), 1)  0.40900    0.08561   4.777 2.35e-06 ***
-## lag(as.vector(w_hat1), 2)  0.15529    0.07903   1.965     0.05 *  
+## (Intercept)                0.01791    0.04358   0.411   0.6813    
+## lag(as.vector(y), 1)       1.27540    0.06525  19.545  < 2e-16 ***
+## lag(as.vector(y), 2)      -0.44897    0.05725  -7.842 2.80e-14 ***
+## lag(as.vector(w_hat1), 1)  0.56338    0.07880   7.150 3.18e-12 ***
+## lag(as.vector(w_hat1), 2)  0.19565    0.07864   2.488   0.0132 *  
 ## ---
 ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 ## 
-## Residual standard error: 1.005 on 488 degrees of freedom
-##   (7 observations deleted due to missingness)
-## Multiple R-squared:  0.9226,	Adjusted R-squared:  0.922 
-## F-statistic:  1454 on 4 and 488 DF,  p-value: < 2.2e-16
+## Residual standard error: 0.969 on 490 degrees of freedom
+##   (5 observations deleted due to missingness)
+## Multiple R-squared:  0.9359,	Adjusted R-squared:  0.9354 
+## F-statistic:  1788 on 4 and 490 DF,  p-value: < 2.2e-16
 ```
 
 There is uncertainty on the residuals, so we refit by taking residuals of `lm1` and using those instead. 
@@ -408,22 +400,22 @@ d = modelr::add_residuals(d,lm1,"w_hat2")
 ## 
 ## Residuals:
 ##      Min       1Q   Median       3Q      Max 
-## -3.12173 -0.72661 -0.02084  0.66228  3.04655 
+## -2.76151 -0.68521 -0.01931  0.68550  2.89842 
 ## 
 ## Coefficients:
 ##                           Estimate Std. Error t value Pr(>|t|)    
-## (Intercept)                0.02077    0.04544   0.457   0.6479    
-## lag(as.vector(y), 1)       1.31474    0.07140  18.413  < 2e-16 ***
-## lag(as.vector(y), 2)      -0.49038    0.06224  -7.879 2.18e-14 ***
-## lag(as.vector(w_hat2), 1)  0.40787    0.08490   4.804 2.08e-06 ***
-## lag(as.vector(w_hat2), 2)  0.14593    0.07848   1.859   0.0636 .  
+## (Intercept)                0.01709    0.04380   0.390   0.6966    
+## lag(as.vector(y), 1)       1.28126    0.06617  19.362  < 2e-16 ***
+## lag(as.vector(y), 2)      -0.45371    0.05807  -7.813 3.46e-14 ***
+## lag(as.vector(w_hat2), 1)  0.55748    0.08029   6.944 1.23e-11 ***
+## lag(as.vector(w_hat2), 2)  0.19235    0.08002   2.404   0.0166 *  
 ## ---
 ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 ## 
-## Residual standard error: 1.006 on 486 degrees of freedom
-##   (9 observations deleted due to missingness)
-## Multiple R-squared:  0.9226,	Adjusted R-squared:  0.922 
-## F-statistic:  1448 on 4 and 486 DF,  p-value: < 2.2e-16
+## Residual standard error: 0.9722 on 488 degrees of freedom
+##   (7 observations deleted due to missingness)
+## Multiple R-squared:  0.9357,	Adjusted R-squared:  0.9352 
+## F-statistic:  1776 on 4 and 488 DF,  p-value: < 2.2e-16
 ```
 
 ## Step 4.2
@@ -444,22 +436,22 @@ d = modelr::add_residuals(d,lm2,"w_hat3")
 ## 
 ## Residuals:
 ##      Min       1Q   Median       3Q      Max 
-## -3.09934 -0.73640 -0.00399  0.66967  3.00808 
+## -2.80936 -0.68324 -0.02478  0.68661  2.87612 
 ## 
 ## Coefficients:
 ##                           Estimate Std. Error t value Pr(>|t|)    
-## (Intercept)                0.01987    0.04556   0.436   0.6630    
-## lag(as.vector(y), 1)       1.30362    0.07169  18.185  < 2e-16 ***
-## lag(as.vector(y), 2)      -0.48103    0.06245  -7.703 7.58e-14 ***
-## lag(as.vector(w_hat3), 1)  0.42080    0.08530   4.933 1.11e-06 ***
-## lag(as.vector(w_hat3), 2)  0.16010    0.07897   2.027   0.0432 *  
+## (Intercept)                0.02184    0.04375   0.499  0.61784    
+## lag(as.vector(y), 1)       1.26679    0.06631  19.105  < 2e-16 ***
+## lag(as.vector(y), 2)      -0.44139    0.05817  -7.588 1.67e-13 ***
+## lag(as.vector(w_hat3), 1)  0.57233    0.08008   7.147 3.26e-12 ***
+## lag(as.vector(w_hat3), 2)  0.20757    0.07998   2.595  0.00973 ** 
 ## ---
 ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 ## 
-## Residual standard error: 1.006 on 484 degrees of freedom
-##   (11 observations deleted due to missingness)
-## Multiple R-squared:  0.9228,	Adjusted R-squared:  0.9221 
-## F-statistic:  1446 on 4 and 484 DF,  p-value: < 2.2e-16
+## Residual standard error: 0.9691 on 486 degrees of freedom
+##   (9 observations deleted due to missingness)
+## Multiple R-squared:  0.9363,	Adjusted R-squared:  0.9358 
+## F-statistic:  1787 on 4 and 486 DF,  p-value: < 2.2e-16
 ```
 
 ## RMSEs
@@ -470,7 +462,7 @@ modelr::rmse(lm1, data = d)
 ```
 
 ```
-## [1] 0.9996785
+## [1] 0.9640676
 ```
 
 ```r
@@ -478,7 +470,7 @@ modelr::rmse(lm2, data = d)
 ```
 
 ```
-## [1] 1.000582
+## [1] 0.9672682
 ```
 
 ```r
@@ -486,7 +478,7 @@ modelr::rmse(lm3, data = d)
 ```
 
 ```
-## [1] 1.000943
+## [1] 0.9641422
 ```
 
 Once coefficients get "close" to each other, we can say they've converged. We are done. 
@@ -501,6 +493,7 @@ arma22_model = "model{
 # Likelihood
   for (t in 1:length(y)) {
     y[t] ~ dnorm(mu[t], 1/sigma2_e)
+    y_hat[t] ~ dnorm(mu[t], 1/sigma2_e)
   }                    
   
   # estimating first two steps with latent errors 
@@ -547,7 +540,8 @@ if (!file.exists("arma22_coda.rds")) {
   update(m, n.iter=50000, progress.bar="none")
   
   arma22_coda = rjags::coda.samples(
-    m, variable.names=c("phi", "theta", "sigma2_w"), 
+    m, variable.names=c("phi", "theta", "sigma2_w", 
+                        "mu", "y", "y_hat"), 
     n.iter=50000, progress.bar="none", thin = 50
   )
   
@@ -568,12 +562,12 @@ arma22_res = bind_rows(
   data_frame(
     model = "Arima",
     term = c("phi[1]", "phi[2]", "theta[1]", "theta[2]"), 
-    estimate = c(1.3171,  -0.5142,  0.4332,  0.1651)
+    estimate = c(1.2843,  -0.5182,  0.4965,  0.2204)
   ),
   data_frame(
-    model = "HR",
+    model = "HR w_hat3",
     term = c("phi[1]", "phi[2]", "theta[1]", "theta[2]"), 
-    estimate = c(1.34414, -0.54288, 0.38065, 0.11431)
+    estimate = c(1.23758, -0.47868, 0.54084, 0.25991)
   )
 )
 
@@ -592,8 +586,8 @@ arma22_params %>%
   group_by(term) %>%
   slice(seq(1,n(),n()/200)) %>%
   ggplot(aes(x=.iteration, y=estimate, color=term)) +
-    geom_line() +
-    facet_grid(term~., scales = "free_y")
+  geom_line() +
+  facet_grid(term~., scales = "free_y")
 ```
 
 ![](Lec10-Forecasting_files/figure-html/unnamed-chunk-19-1.png)<!-- -->
@@ -606,11 +600,51 @@ These are pretty hard to sample with JAGS.
 ```r
 arma22_params %>%
   ggplot(aes(x=estimate)) +
-    geom_density(fill="lightgrey") +
-    geom_vline(data=arma22_res, aes(xintercept = estimate, color=forcats::as_factor(model), linetype=forcats::as_factor(model)), size=1, alpha=0.5) +
-    facet_wrap(~term, ncol=2, scales = "free")
+  geom_density(fill="lightgrey") +
+  geom_vline(data=arma22_res, aes(xintercept = estimate, color=forcats::as_factor(model), 
+                                  linetype=forcats::as_factor(model)), size=1, alpha=0.5) +
+  labs(color="Model", linetype="Model") + 
+  facet_wrap(~term, ncol=2, scales = "free")
 ```
 
 ![](Lec10-Forecasting_files/figure-html/unnamed-chunk-20-1.png)<!-- -->
 
-All these predictions (ARIMA vs. HR) are all pretty similar to each other. Only Bayesian posterior that is struggling is $\theta_1$. 
+All these predictions (ARIMA vs. HR) are all pretty similar to each other. 
+
+### Predictions 
+
+
+```r
+arma_models = data_frame(
+  t = seq_along(y),
+  ARIMA = forecast::Arima(y, order = c(2,0,2), include.mean = FALSE) %>% fitted(),
+  bayes = tidybayes::gather_draws(arma22_coda, y_hat[i]) %>%
+    ungroup() %>%
+    mutate(.variable = paste0(.variable,"[",i,"]")) %>%
+    group_by(.variable) %>%
+    summarize(post_mean = mean(.value)) %>%
+    pull(post_mean),
+  y = y
+) %>%
+  tidyr::gather(model, y, -t)
+gridExtra::grid.arrange(
+  arma_models %>%
+    filter(model=="y" | model=="bayes") %>%
+    ggplot(aes(x=t, y=y, color=forcats::as_factor(model))) +
+    geom_line(alpha=0.75) +
+    scale_color_manual(values=c("light blue","black")) +
+    labs(color="Model")
+  ,
+  arma_models %>%
+    filter(model=="y" | model=="ARIMA") %>%
+    ggplot(aes(x=t, y=y, color=forcats::as_factor(model))) +
+    geom_line(alpha=0.75) +
+    scale_color_manual(values=c("red", "black")) +
+    labs(color="Model")
+)
+```
+
+![](Lec10-Forecasting_files/figure-html/unnamed-chunk-21-1.png)<!-- -->
+
+We see that the Bayesian model is struggling. 
+
