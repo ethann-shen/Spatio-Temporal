@@ -1,2 +1,2 @@
-# Spatio-Temporal
-Following along STA 444 
+# Spatio Temporal Modeling
+Following along STA 444 @ Duke
