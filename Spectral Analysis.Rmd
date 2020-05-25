@@ -1,0 +1,38 @@
+---
+title: "Spectral Analysis"
+author: "Ethan Shen"
+date: "5/22/2020"
+output: 
+  html_document:
+    keep_md: TRUE
+---
+
+```{r setup, include=FALSE}
+library(astsa)
+```
+
+# Periodogram
+
+## Example of Periodic Series
+ 
+```{r}
+x1 = 2*cos(2*pi*1:100*6/100)  + 3*sin(2*pi*1:100*6/100)
+x2 = 4*cos(2*pi*1:100*10/100) + 5*sin(2*pi*1:100*10/100)
+x3 = 6*cos(2*pi*1:100*40/100) + 7*sin(2*pi*1:100*40/100)
+x = x1 + x2 + x3 
+
+par(mfrow=c(2,2))
+astsa::tsplot(x1, ylim=c(-10,10), main = expression(omega==6/100~~~A^2==13))
+astsa::tsplot(x2, ylim=c(-10,10), main = expression(omega==10/100~~~A^2==41))
+astsa::tsplot(x3, ylim=c(-10,10), main = expression(omega==40/100~~~A^2==85))
+astsa::tsplot(x, ylim=c(-16,16), main="sum")
+```
+
+## Scaled Periodogram 
+
+```{r}
+P = Mod(2*fft(x)/100)^2;  Fr = 0:99/100
+plot(Fr, P, type="o", xlab="frequency", ylab="scaled periodogram")
+```
+
+Scaled Periodogram: larger values of `w` (frequency) indicate which values of the time series are predominant. The peaks occur at 6, 10, 40, which are exactly the frequencies of `x1`, `x2`, and `x3`. 

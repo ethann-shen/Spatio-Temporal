@@ -1,0 +1,50 @@
+---
+title: "Lecture 13 - Gaussian Process Models Part 2"
+author: "Ethan Shen"
+date: "5/25/2020"
+output: 
+  html_document:
+    keep_md: TRUE
+---
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(ggplot2)
+ggplot2::theme_set(new = theme_bw())
+source("../util.R")
+```
+
+```{r}
+vals = expand.grid(
+  d = seq(0, 2, length.out = 100),
+  l = seq(1, 7, length.out = 10)
+) %>%
+  as.data.frame() %>%
+  tbl_df()
+```
+
+## Covariance vs Semivariogram - Exponential and Squared Exponential Covariance Functions
+
+```{r}
+exp = rbind(
+  mutate(vals, func="exp cov", y = exp_cov(d, l=l)),
+  mutate(vals, func="exp semivar", y = exp_sv(d, l=l))
+) 
+
+sq_exp = rbind(
+  mutate(vals, func="sq exp cov", y = sq_exp_cov(d, l=l)),
+  mutate(vals, func="sq exp semivar", y = sq_exp_sv(d, l=l))
+) 
+
+rbind(exp, sq_exp) %>%
+  mutate(l = as.factor(round(l,1))) %>%
+  ggplot(aes(x=d, y=y, color=l)) +
+  geom_line() +
+  facet_wrap(~func, ncol=2) + 
+  labs(title=expression(paste(sigma[w]^2, " = 0")))
+```
+
+We are interested in asymptotic properties of these functions. 
+
+
+
