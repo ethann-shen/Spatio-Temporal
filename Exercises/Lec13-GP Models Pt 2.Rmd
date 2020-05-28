@@ -45,6 +45,6 @@ rbind(exp, sq_exp) %>%
 ```
 
 We are interested in asymptotic properties of these functions. 
-
+  
 
 

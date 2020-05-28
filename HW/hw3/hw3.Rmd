@@ -1,0 +1,544 @@
+---
+title: "Homework 4"
+author: Your Name Here
+date: Due 2/27/2017 by 11:59 pm
+output: 
+  html_document:
+    theme: cosmo
+---
+
+```{r}
+knitr::opts_chunk$set(warning=FALSE,
+                      message=FALSE,
+                      echo=FALSE)
+library(tidyverse)
+library(forecast)
+source("/Users/ethanshen/Documents/Projects for Fun /Spatio-Temporal Modeling/util.R")
+theme_set(new = theme_bw())
+```
+
+# Question 1
+
+<i>The `forecast` package contains a dataset called `gas` which contains monthly gas production in Australia between 1956 and 1995. Fit an appropriate seasonal ARIMA model to these data, choose and justify your choice of $p$, $d$, and $q$ for the local and seasonal components. Be sure to include any EDA and residual analyses you perform.</i>
+
+```{r}
+gas = forecast::gas
+auto.arima(gas)
+```
+
+## EDA
+
+```{r}
+ggtsdisplay(gas) 
+ggtsdisplay(diff(gas))
+```
+
+## Seasonal ARIMA 
+
+First, I want to difference and then exam the seasonal pattern. There is an obvious pattern at 12 months.
+
+```{r}
+s1 <- Arima(gas, seasonal = list(order=c(0,1,0), period=12))
+summary(s1)
+ggtsdisplay(s1$residuals)
+```
+
+After differencing the seasonal component, I see big spikes at 12, 24, and 36 in the PACF and constant decay in the ACF. I will first try fitting a seasonal MA component. 
+
+```{r}
+s2 <- Arima(gas, seasonal = list(order=c(0,1,1), period=12))
+summary(s2)
+ggtsdisplay(s2$residuals)
+```
+
+The pattern in the ACF and PACF is still there, so now we move to regular ARIMA. 
+
+## Regular ARIMA 
+
+```{r}
+s3 <- Arima(gas, order = c(0,1,0), seasonal = list(order=c(0,1,1), period=12))
+summary(s3)
+ggtsdisplay(s3$residuals)
+```
+
+Definitely want to add an MA(1) after differencing. The ACF definitely does not show obvious signs of AR. 
+
+```{r}
+s4 <- Arima(gas, order = c(0,1,1), seasonal = list(order=c(0,1,1), period=12))
+summary(s4)
+ggtsdisplay(s4$residuals)
+```
+
+Most of the structure is gone, but we can add another AR(1) term. 
+
+
+```{r}
+s5 <- Arima(gas, order = c(1,1,1), seasonal = list(order=c(0,1,1), period=12))
+summary(s5)
+ggtsdisplay(s5$residuals)
+```
+
+The additional AR(1) term didn't help much. Now let's try fitting these models: `s4`, `s5`, and `auto.arima`.
+
+## Model Fit 
+
+```{r warning=FALSE}
+model_pred=tibble(
+  t=time(gas),
+  true=gas,
+  "ARIMA(0,1,1)(0,1,1)[12]"=s4 %>% fitted(),
+  "ARIMA(1,1,1)(0,1,1)[12]"=s5 %>% fitted(),
+  "ARIMA(2,1,1)(0,1,1)[12]"=auto.arima(gas) %>% fitted()
+) %>% 
+  tidyr::gather(model, value, -t)
+
+cbPalette = c("#000000", "#ff3333", "#92c5de")
+
+gridExtra::grid.arrange(
+  model_pred %>% 
+    filter(model=="true" | model == "ARIMA(0,1,1)(0,1,1)[12]") %>%
+    ggplot(aes(x=t, y=value, color = model)) + 
+    geom_line(alpha=0.75, size=0.8) + 
+    labs(title = (gas-s4$fitted)^2 %>% mean() %>% sqrt() %>% round(2) %>% paste0("[RMSE: ", . ,"]")) +
+    scale_colour_manual(values=cbPalette, name=""),
+  
+  model_pred %>% 
+    filter(model=="true" | model == "ARIMA(1,1,1)(0,1,1)[12]") %>%
+    ggplot(aes(x=t, y=value, color = model)) + 
+    geom_line(alpha=0.75, size=0.8) + 
+    labs(title = (gas-s5$fitted)^2 %>% mean() %>% sqrt() %>% round(2) %>% paste0("[RMSE: ", . ,"]")) +
+    scale_colour_manual(values=cbPalette, name=""),
+  
+  model_pred %>% 
+    filter(model=="true" | model == "ARIMA(2,1,1)(0,1,1)[12]") %>%
+    ggplot(aes(x=t, y=value, color = model)) + 
+    geom_line(alpha=0.75, size=0.8) + 
+    labs(title = (gas-auto.arima(gas)$fitted)^2 %>% mean() %>% sqrt() %>% round(2) %>% paste0("[RMSE: ", . ,"]")) +
+    scale_colour_manual(values=cbPalette, name="")
+)
+```
+
+There is barely any differencing in the predictions of these three models, so the best would be pick the simplest model, `ARIMA(0,1,1)(0,1,1)[12]`.
+
+-----
+
+# Question 2
+
+<i>The `forecast` package also contains a dataset called `taylor` which contains Half-hourly electricity demand in England and Wales from Monday 5 June 2000 to Sunday 27 August 2000. Fit an appropriate seasonal ARIMA model to these data, choose and justify your choice of $p$, $d$, and $q$ for the local an seasonal components. Be sure to include any EDA and residual analyses you perform.</i>
+
+## EDA 
+
+```{r}
+taylor = forecast::taylor
+ggtsdisplay(taylor)
+```
+
+## Seasonal ARIMA 
+
+ACF shows patterns at 336 This means the period should be 336. I will first see if differencing helps. 
+
+```{r}
+t1 <- Arima(taylor, seasonal = list(order=c(0,1,0), period=336))
+summary(t1)
+ggtsdisplay(t1$residuals, lag.max = 700)
+```
+
+Differencing seems to help by removing some of the cyclical pattern. but now I want to try adding a seasonal MA(1) term. There are peaks at 336 and 672 in the PACF. 
+
+```{r}
+# t2 <- Arima(taylor, seasonal = list(order=c(0,1,1), period=336))
+# summary(t2)
+# ggtsdisplay(t2$residuals, lag.max = 700)
+```
+
+There doesn't seem to be much change. I want to also try a seasonal AR(1) term, because the ACF decays to 0 at 336. 
+
+```{r}
+# t3 <- Arima(taylor, seasonal = list(order=c(1,1,0), period=336))
+# summary(t3)
+# ggtsdisplay(t3$residuals, lag.max=700)
+```
+
+Clearly, adding a seasonal AR(1) or MA(1) doesn't help.
+
+## Regular ARIMA 
+
+We can see if regular differencing helps. 
+
+```{r}
+t4 <- Arima(taylor, order = c(0,1,0), seasonal = list(order=c(0,1,0), period=336))
+summary(t4)
+ggtsdisplay(t4$residuals, lag.max=700)
+```
+
+Differencing definitely helps. We can also do an MA(1) term because there is a big peak in the PACF. 
+
+```{r}
+if (file.exists("t5.rds")) {
+  t5 = readRDS(file="t5.rds")
+} else {
+  t5 <- Arima(taylor, order = c(0,1,1), seasonal = list(order=c(0,1,0), period=336))
+  
+  saveRDS(t5, file="t5.rds")
+}
+
+summary(t5)
+ggtsdisplay(t5$residuals, lag.max=700)
+
+```
+
+```{r warning=FALSE, include=FALSE}
+model_pred=tibble(
+  t=time(taylor),
+  true=taylor,
+  "ARIMA(0,1,0)(0,1,0)[336]"=t4 %>% fitted(),
+  "ARIMA(0,1,1)(0,1,0)[336]"=t5 %>% fitted()
+) %>% 
+  tidyr::gather(model, value, -t)
+
+cbPalette = c("#000000", "#ff3333", "#92c5de")
+
+gridExtra::grid.arrange(
+  model_pred %>% 
+    filter(model=="true" | model == "ARIMA(0,1,0)(0,1,0)[336]") %>%
+    ggplot(aes(x=t, y=value, color = model)) + 
+    geom_line(alpha=0.75, size=0.8) + 
+    labs(title = (taylor-t4$fitted)^2 %>% mean() %>% sqrt() %>% round(2) %>% paste0("[RMSE: ", . ,"]")) +
+    scale_colour_manual(values=cbPalette, name=""),
+  
+  model_pred %>% 
+    filter(model=="true" | model == "ARIMA(0,1,1)(0,1,0)[336]") %>%
+    ggplot(aes(x=t, y=value, color = model)) + 
+    geom_line(alpha=0.75, size=0.8) + 
+    labs(title = (taylor-t5$fitted)^2 %>% mean() %>% sqrt() %>% round(2) %>% paste0("[RMSE: ", . ,"]")) +
+    scale_colour_manual(values=cbPalette, name="")
+)
+```
+
+-----
+
+## Question 3
+
+<i>Derive the **7** step ahead prediction, $E(y_{n+7}|y_n,\ldots,y_1,\ldots)$,</i>
+
+a. <i>for an ARIMA(1,1,0)$\times$(1,1,0)_6 seasonal model</i>
+
+$$ \begin{aligned}
+~
+\end{aligned} $$
+
+
+b. <i>for an ARIMA(1,1,0)$\times$(0,1,1)_6 seasonal model</i>
+
+$$ \begin{aligned}
+~
+\end{aligned} $$
+
+
+-----
+
+# Question 4
+
+<i> Assume you are given a bivariate normal distribution, $Y = (y_1, y_2)^t$, with $\mu = (\mu_1, \mu_2)^t$ and $\Sigma = \begin{pmatrix}\sigma^2 & \rho \, \sigma^2 \\ \rho \, \sigma^2 & \sigma^2\end{pmatrix}$ where $\sigma > 0$ and $0 \leq \rho \leq 1$. </i>'
+
+<br/>
+
+a. <i> Show that the marginal distribution of $y_1$ is given by $y_1 \sim \mathcal{N}(\mu_1, \sigma^2)$.</i>
+
+$$\begin{aligned}
+~
+\end{aligned}$$
+
+b. <i> Show that the conditional distribution of $y_1|y_2 = a$ is given by $y_1|y_2 = a \sim \mathcal{N}(\mu_1 + \rho(a-\mu_2),\sigma^2-\rho^2\sigma^2).$</i>
+
+$$\begin{aligned}
+~
+\end{aligned}$$
+
+-----
+
+# Question 5
+
+a. <i> Construct a Gibbs sampler for generating 1000 samples from a multivariate normal distribution where </i>
+$$
+\mu = (1,2,3)^t \\
+\\
+\Sigma = \begin{pmatrix} 
+3   & 0.5 & 1   \\
+0.5 & 2   & 1.5 \\
+1   & 1.5 & 3.5
+\end{pmatrix}
+$$
+
+```{r}
+```
+
+b. <i> Using the matrix "square root" method described in class, generate another 1000 samples from the multivariate normal described above. </i>
+
+```{r}
+```
+
+c. <i> For both sampling method create 3 bivariate density plots showing the relationship between each pair of dimensions (e.g. 1 vs. 2, 2 vs. 3, 1 vs 3). Compare these plots between the sampling methods and note any similarity or discrepancies. </i>
+
+```{r}
+```
+
+-----
+
+# Question 6
+
+<i>This repository includes two rds files called `gp.rds` and `gp_truth.rds` that contains observed data as well as sample from the underlying true process respectively.</i> 
+
+a. <i>Fit a Gaussian process model by first fitting a linear model to the data and then examining any remaining dependence using a variogram. Based on the variogram (roughly) estimate $\sigma^2$, $l$, and $\sigma^2_w$. Using this estimates along with the $\beta$s from the lm construct an appropriate multivariate normal distribution for these data and construct the appropriate predictive distribution at the `x` locations given in `gp_truth`. Generate at least 1000 samples from this distribution, using these draws create a best fit line and prediction interval for your model.</i>
+
+```{r}
+data = readRDS("gp.rds")
+truth = readRDS("gp_truth.rds")
+
+lin_mod = lm(y~x + I(x^2) + I(x^3) + I(x^4), data=data)
+summary(lin_mod)
+
+ggplot(data, aes(x=x, y=y)) + 
+  geom_point() + 
+  geom_smooth(method="lm", formula = y ~ x + I(x^2) + I(x^3) + I(x^4)) 
+```
+
+## Variogram 
+
+```{r}
+rbind(
+  data %>% emp_semivariogram(y, x, bin=TRUE, binwidth=0.05, range_max=max(data$x)) %>% mutate(binwidth="binwidth=0.05"),
+  data %>% emp_semivariogram(y, x, bin=TRUE, binwidth=0.1, range_max=max(data$x)) %>% mutate(binwidth="binwidth=0.1"),
+  data %>% emp_semivariogram(y, x, bin=TRUE, binwidth=0.2, range_max=max(data$x)) %>% mutate(binwidth="binwidth=0.2"),
+  data %>% emp_semivariogram(y, x, bin=TRUE, binwidth=0.5, range_max=max(data$x)) %>% mutate(binwidth="binwidth=0.5")
+) %>% 
+  ggplot(aes(x = h, y = gamma, size = n)) + 
+  geom_point() +
+  facet_wrap(~binwidth, ncol=2)
+```
+
+The variograms all show the same pattern, which is a good indication. 
+
+```{r}
+rbind(
+  data %>% emp_semivariogram(y, x, bin=TRUE, binwidth=0.05, range_max=max(data$x)) %>% mutate(binwidth="binwidth=0.05")
+) %>% 
+  summarise(min_h=min(h),
+            min_g=min(gamma))
+```
+
+From the semivariogram, assume $sigma_w^2$ = 0.1212883. Say the semivariogram starts to asymptote at gamma = 2.5, so $sigma^2$ = 2.5 - 0.1212883 = 2.378712. When fitting a Gaussian Process model, I want to use a squared exponential covariance function with the correlation < 0.05. Thus, let $ d = \sqrt3 / l$. Say the semivariogram starts to asymptote at h = 1.6. Then, $l$ = 1.082532. I want to plot these values just to see if they make sense. 
+
+```{r}
+sigma2 = 2.378712
+sigma2_w = 0.1212883
+l = 1.082532
+
+d_fit = data_frame(h=seq(0, max(data$x),length.out = 1000)) %>%
+  mutate(gamma = sigma2 + sigma2_w - (sigma2 * exp(-(l*h)^2)))
+
+rbind(
+  data %>% emp_semivariogram(y, x, bin=TRUE, binwidth=0.05, range_max=max(data$x)) %>% mutate(binwidth="binwidth=0.05"),
+  data %>% emp_semivariogram(y, x, bin=TRUE, binwidth=0.1, range_max=max(data$x)) %>% mutate(binwidth="binwidth=0.1"),
+  data %>% emp_semivariogram(y, x, bin=TRUE, binwidth=0.2, range_max=max(data$x)) %>% mutate(binwidth="binwidth=0.2"),
+  data %>% emp_semivariogram(y, x, bin=TRUE, binwidth=0.5, range_max=max(data$x)) %>% mutate(binwidth="binwidth=0.5")
+) %>% 
+  ggplot(aes(x = h, y = gamma)) + 
+  geom_point() +
+  geom_line(data=d_fit, color='red') +
+  geom_point(x=0,y=sigma2_w, color='red') +
+  facet_wrap(~binwidth, ncol=2)
+```
+
+## Sampling
+
+```{r}
+# values of parameters 
+beta0 = 5.1047243 ; beta1 = -0.3685988 ; beta2 = 1.7171032 ; beta3 = -1.5959488 ; beta4 = 0.3297040 
+sigma2_w = 0.1212883 ; sigma2 = 2.378712 ; l = 1.082532
+
+# lm construct
+
+# betas
+betas = c(beta0,beta1,beta2,beta3,beta4)
+dim(betas) <- c(5,1)
+
+# predicted x 
+x_vals_pred = c(rep(1,nrow(data)), data$x, (data$x)^2, (data$x)^3, (data$x)^4)
+dim(x_vals_pred) = c(nrow(data),5)
+
+# true x
+x_vals_truth= c(rep(1,nrow(truth)), truth$x, (truth$x)^2, (truth$x)^3, (truth$x)^4)
+dim(x_vals_truth) = c(nrow(truth),5)
+
+# mu
+beta_mu_obs = x_vals_pred %*% betas
+beta_mu_true = x_vals_truth %*% betas
+
+#GP 
+cond_pred = function(d_pred, d, cov, ..., nugget, reps=1000)
+{
+  dist_o  = fields::rdist(d$x)
+  dist_p  = fields::rdist(d_pred$x)
+  dist_op = fields::rdist(d$x, d_pred$x)
+  dist_po = fields::rdist(d_pred$x, d$x)
+  
+  cov_o  = cov(dist_o, ...)
+  cov_p  = cov(dist_p, ...)
+  cov_op = cov(dist_op, ...)
+  cov_po = cov(dist_po, ...)
+  
+  # Adding nugget to diagonal
+  diag(cov_o) = diag(cov_o) + nugget
+  diag(cov_p) = diag(cov_p) + nugget 
+  
+  cond_mu  = beta_mu_true + (cov_po %*% solve(cov_o) %*% ((d$y)-beta_mu_obs)) 
+  
+  cond_cov = cov_p - cov_po %*% solve(cov_o) %*% cov_op
+
+  cond_mu %*% matrix(1, ncol=reps) + t(chol(cond_cov)) %*% matrix(rnorm(nrow(d_pred)*reps), ncol=reps)
+}
+```
+
+## Prediction - Betas & Dependence
+
+```{r}
+d_pred = data_frame(x = truth$x)
+GP_predictions_betas = cbind(
+  d_pred,
+  cond_pred(d_pred, data, cov = sq_exp_cov, sigma2 = 2.378712, l = 1.082532, nugget=0.1212883, reps=1000) %>%
+    t() %>% 
+    post_summary(),
+  y=truth$y,
+  model="Gaussian Process Model"
+) 
+
+rmse_post_mean_semi = GP_predictions_betas %>%
+  summarise(rmse = (y-post_mean)^2 %>% mean() %>% sqrt() %>% round(6) %>% paste0("RMSE: ", .)
+  )
+
+ggplot(truth, aes(x=x, y=y)) + 
+  geom_point() +
+  geom_line(data=GP_predictions_betas, color='blue', aes(y=post_mean), size=1) +
+  geom_ribbon(data=GP_predictions_betas, fill='blue', alpha=0.1, aes(ymin=post_lower, ymax=post_upper, y=post_mean)) + 
+  labs(title = "Posterior Predictions",
+       subtitle = paste0("Posterior Mean: ", rmse_post_mean_semi))
+```
+
+
+b. <i>Fit a full Bayesian Gaussian process model using JAGs or similar software. Make sure to think about what covariance function seems appropriate and include any relevant mean structure. Generate draws from the full posterior predictive distribution at the `x` locations given in `gp_truth`, use draw a best fit line and posterior predictive credible intervalfor your model.</i>
+
+## Bayesian GP Model 
+
+```{r}
+gp_bayes_model="model{
+  y ~ dmnorm(mu, inverse(Sigma))
+  for (i in 1:N) {
+    mu[i] <- 0
+}
+  for (i in 1:(N-1)) {
+    for (j in (i+1):N) {
+      Sigma[i,j] <- sigma2 * exp(- pow(l*d[i,j],2))
+      Sigma[j,i] <- Sigma[i,j]
+    }
+}
+  for (k in 1:N) {
+    Sigma[k,k] <- sigma2 + nugget
+}
+  sigma2 ~ dlnorm(0, 1.5)
+  l ~ dt(0, 2.5, 1) T(0,) # Half-cauchy(0,2.5)
+  nugget ~ dlnorm(0, 1)
+}"
+
+if (file.exists("gp_sq_exp_jags.rds")) {
+  sq_exp_cov_coda = readRDS(file="gp_sq_exp_jags.rds")
+} else {
+  m = rjags::jags.model(
+    textConnection(gp_bayes_model), 
+    data = list(
+      y = (data$y),
+      d = dist(data$x) %>% as.matrix(),
+      N = length(data$y)
+    )
+  )
+  
+  update(m, n.iter=5000)
+  
+  sq_exp_cov_coda = rjags::coda.samples(
+    m, variable.names=c("sigma2", "l", "nugget"),
+    n.iter=10000
+  )
+  
+  saveRDS(sq_exp_cov_coda, file="gp_sq_exp_jags.rds")
+}
+```
+
+## Trace Plots / MCMC Diagnostics 
+
+```{r}
+tidybayes::gather_draws(sq_exp_cov_coda, sigma2, l, nugget) %>%
+  ggplot(aes(x=.iteration, y=.value, color = .variable)) + 
+  geom_line() + 
+  facet_grid(.variable~., scales = "free_y")
+```
+
+## Prediction - Bayesian 
+
+```{r}
+params = (sq_exp_cov_coda %>% MCMCvis::MCMCsummary())$mean
+
+# Parameters
+sigma2_w.bayes = params[2] ; sigma2.bayes = params[3] ; l.bayes = params[1]
+
+GP_predictions_bayes = cbind(
+  d_pred,
+  cond_pred(d_pred, data, cov = sq_exp_cov, sigma2 = sigma2.bayes, l = l.bayes, nugget=sigma2_w.bayes, reps=1000) %>% 
+    t() %>% 
+    post_summary(),
+  y=truth$y,
+  model="Bayesian Posterior Predictive"
+) 
+
+rmse_post_mean_bayes = GP_predictions_bayes %>%
+  summarise(rmse = (y-post_mean)^2 %>% mean() %>% sqrt() %>% round(6) %>% paste0("Bayesian RMSE: ", . )
+  )
+
+
+ggplot(truth, aes(x=x, y=y)) + 
+  geom_point() +
+  geom_line(data=GP_predictions_bayes, color='blue', aes(y=post_mean), size=1) +
+  geom_ribbon(data=GP_predictions_bayes, fill='blue', alpha=0.1, aes(ymin=post_lower, ymax=post_upper, y=post_mean)) + 
+  labs(title = "Posterior Predictions",
+       subtitle = paste0("Posterior Mean: ", rmse_post_mean_bayes))
+```
+
+c. <i>Compare the predictive performance of both approaches, using the `y` values in `gp_truth`. Which method appeared to perform better? Why?</i>
+
+```{r}
+GP_predictions = rbind(
+  GP_predictions_betas,
+  GP_predictions_bayes
+) 
+
+GP_predictions %>%
+  group_by(model) %>%
+  summarise(rmse = (y-post_mean)^2 %>% mean() %>% sqrt() %>% round(6))
+
+colors <- c("Gaussian Process Model" = "blue", "Bayesian Posterior Predictive" = "red")
+
+ggplot(truth, aes(x=x, y=y)) + 
+  geom_point() + 
+  geom_line(data=GP_predictions %>% filter(model=="Gaussian Process Model"), aes(y=post_mean, color='Gaussian Process Model'), size=1) +
+  geom_ribbon(data=GP_predictions %>% filter(model=="Gaussian Process Model" ), alpha=0.1, aes(ymin=post_lower, ymax=post_upper, y=post_mean, fill='Gaussian Process Model')) + 
+  
+  
+  geom_line(data=GP_predictions %>% filter(model=="Bayesian Posterior Predictive" ), aes(y=post_mean, color='Bayesian Posterior Predictive'), size=1) +
+  geom_ribbon(data=GP_predictions %>% filter(model=="Bayesian Posterior Predictive" ), alpha=0.1, aes(ymin=post_lower, ymax=post_upper, y=post_mean, fill='Bayesian Posterior Predictive')) +
+  labs(title="Posterior Mean Predictions",
+       subtitle = rmse_post_mean_bayes,
+       color="Model", 
+       fill="Model") +
+    scale_color_manual(values = colors)
+
+```
+

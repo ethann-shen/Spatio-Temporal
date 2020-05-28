@@ -27,6 +27,8 @@ pow_exp_cov = function(d, sigma2=1, l=1, p) sigma2 * exp(-(abs(d)*l)^p)
 ## Correlation Decay 
 
 ```{r}
+source("../util.R")
+
 vals = expand.grid(
   d = seq(0, 1, length.out = 100),
   l = seq(1, 10, length.out = 10)
@@ -441,7 +443,7 @@ cond_pred_fix = function(d_pred, d, cov, ..., nugget, reps=1000)
   
   cond_cov = cov_p - cov_po %*% solve(cov_o) %*% cov_op
   
-  cond_mu %*% matrix(1, ncol=reps) + t(chol(cond_cov)) %*% matrix(rnorm(nrow(d_pred)*reps), ncol=reps)
+  cond_mu %*% matrix(1, ncol=reps) + t(chol(cond_cov)) %*% matrix(rnorm(nrow(d_pred)*reps), ncol=reps) 
 }
 ```
 
