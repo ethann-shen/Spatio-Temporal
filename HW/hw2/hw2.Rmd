@@ -1,0 +1,258 @@
+---
+title: "Homework 2"
+author: Your Name Here
+date: Due 2/20/2017 by 11:59 pm
+output: 
+  html_document:
+    theme: cosmo
+---
+
+```{r}
+library(tidyverse)
+```
+
+### Question 1
+
+In class we mentioned that we can deal with overdispersion in a Poisson regression model by using a Negative Binomial distribution instead. There is a clever parameterization that helps with the interpretability of the model. If we define
+
+$$
+\begin{aligned}
+Y~|~Z &\sim \text{Pois}(\lambda \, Z) \\
+Z &\sim \text{Gamma}(\theta, \, \theta)
+\end{aligned}
+$$
+
+*show* that the marginal distribution of $Y = \int_0^\infty [Y~|~Z]~[Z] ~ dz$ will be negative binomial with,
+
+$$
+\begin{aligned}
+E(Y)   &= \lambda \\
+Var(Y) &= \lambda + \lambda^2/\theta
+\end{aligned}
+$$
+
+-----
+
+### Question 2
+
+<i>Imagine that a follow up study was conducted for the sleep study mentioned in Lecture 5. This time the researchers were interested in in exploring the effect of season (time of year) on sleep deprivation and reaction time. Following the previous protocal, they conducted two separate experiments in June and December with 5 different subjects in each (subjects were studied over 10 days with reaction time being assessed once each day). Each of the 100 observations (rows) therefore contains the subject's id, day of experiment (0-9), reaction time, and season (June or December). </i>
+
+<i> a. Write down a reasonable random intercept only model for this new experimental design. </i>
+
+$$ ~ $$
+
+<i> b. Sketch the structure of the covariance implied by this new model, assume that the random effect for each subject has variance $\sigma_s^2$ and the random effect for season has variance $\sigma_t^2$. </i>
+
+$$ ~ $$
+
+
+-----
+
+### Question 3
+
+<i>Assume we have a process defined by $y_t = 3 + 2\,t + 0.5 \, y_{t-1} + 0.1 \, y_{t-2} + w_t$ where $w_t \overset{iid}{\sim} \mathcal{N}(0, \sigma^2_w)$ </i>
+
+a. <i> Is $y_t$ stationary ? Show why or why not.</i>
+
+$$
+\begin{aligned}
+~
+\end{aligned}
+$$
+
+b. <i> Is $y_t$ difference stationary (i.e. is $y_t - y_{t-1}$ stationary)? Show why or why not.</i>
+
+$$
+\begin{aligned}
+~
+\end{aligned}
+$$
+
+
+-----
+
+### Question 4
+
+<i>Let $y_t = 1 + 0.5 \, y_{t-1} + 0.5 \, w_{t-1} + w_t$s, where $w_t \overset{iid}{\sim} \mathcal{N}(0,\sigma^2_w)$.</i>
+
+a. <i>Find $E(y_t)$</i>
+
+$$
+\begin{aligned}
+~
+\end{aligned}
+$$
+
+b. <i>Find $\text{Var}(y_t)$</i>
+
+$$
+\begin{aligned}
+~
+\end{aligned}
+$$
+
+c. <i>Find autocovariance function of $y_t$, $\gamma_y(h)$</i>
+
+$$
+\begin{aligned}
+~
+\end{aligned}
+$$
+
+d. <i>Find the autocorrelation function of $y_t$, $\rho_y(h)$</i>
+
+$$
+\begin{aligned}
+~
+\end{aligned}
+$$
+
+e. <i>Rewrite ${\bf y} = \{y_t\}$ as a multivariate normal distribution, clearly define both ${\bf \mu}$ and ${\bf \Sigma}$</i>
+
+$$
+\begin{aligned}
+~
+\end{aligned}
+$$
+
+-----
+
+### Question 5
+
+a. Write a function to simulate an AR(1) process for an arbitrary $\phi$, assume that $y_0 = 0$.
+
+```{r}
+sim_ar = function(length, phi) {
+  ar = tibble(
+    t = 1:length,
+    y = 0
+  )
+  
+  for(t in 2:nrow(ar)) {
+    ar$y[t] = phi * ar$y[t-1] + rnorm(1, mean=0, sd=1)
+  }
+  
+  ar
+}
+```
+
+b. Pick a value of $\phi$ such that $0 < \phi < 1$, generate at least 1000 samples from this process and compare the empirical mean and variance to the appropriate theoretical values.
+
+```{r}
+set.seed(1376489)
+ar_sim1 = sim_ar(5000, 0.5) 
+
+ar_sim1 %>%
+  ggplot(aes(x=t,y=y)) +
+  geom_line() +
+  labs(title = expression(paste(phi, " = 0.5")))
+```
+
+```{r}
+ar_sim1 %>%
+  summarise(mean=mean(y),
+            var=var(y))
+```
+
+The theoretical mean should be 0, and the theoretical variance, $\sigma_w^2 * \frac{1}{1-\phi^2}$ is 1/.75 = 4/3. The empirical values are pretty close. 
+
+c. Compute the empirical ACF for your simulation, compare this to the values of theoretical autocorrelation function.
+
+```{r warning=FALSE}
+strip_attrs = function(obj) {
+  attributes(obj) = NULL
+  obj
+}
+
+autocor = function(phi, h) {
+  (phi^abs(h)) 
+}
+
+list = c()
+for (h in 1:20) {
+  val = autocor(0.5, h)
+  list = c(list, val)
+}
+
+tibble(
+  h = 1:20,
+  theoretical = (forecast::Acf(ar_sim1$y, plot=F)[1:20] %>% strip_attrs())[[1]],
+  empirical = list
+) %>%
+  tidyr::gather(type, val, -h) %>%
+  ggplot(aes(x = h, y = val, color = type)) + 
+  geom_line()
+```
+
+d. Repeat your simulation in part b. at least 100 times, create a **visualization** to compare your empirical means and variances to the appropriate theoretical values.
+
+```{r}
+
+```
+
+-----
+
+### Question 6
+
+a. Write a function to simulate an MA(1) process for an arbitrary $\theta$, assume that $y_0 = 0$.
+
+```{r}
+sim_ma = function(n, theta) {
+  tibble(
+    t = 1:n,
+    y = arima.sim(n=n, list(ma=c(theta)))
+  )
+}
+```
+
+b. Pick a value of $\theta$, generate at least 1000 samples from this process and compare the empirical mean and variance to the appropriate theoretical values.
+
+Theoretical mean is 0, theoretical variance ($(1 + \theta^2)*\sigma_w^2$) is 1.25
+
+```{r}
+sim_ma(1000, 0.5) %>% 
+  summarise(mean=mean(y), 
+            var=var(y))
+```
+
+c. Compute the empirical ACF for your simulation, compare this to the values of theoretical autocorrelation function.
+
+```{r}
+autocor2 = function(theta, h) {
+  if (h==0) {
+    autocorrelation=1
+  } else if (h==abs(1)) {
+    autocorrelation=theta/(1 + theta^2)
+  } else {
+    autocorrelation=0
+  }
+  
+  autocorrelation
+}
+
+list2 = c()
+for (h in 1:20) {
+  val = autocor2(0.5, h)
+  list2 = c(list2, val)
+}
+
+tibble(
+  h = 1:20,
+  theoretical = (forecast::Acf(sim_ma(1000, 0.5) $y, plot=F)[1:20] %>% strip_attrs())[[1]],
+  empirical = list2
+) %>%
+  tidyr::gather(type, val, -h) %>%
+  ggplot(aes(x = h, y = val, color = type)) + 
+  geom_line()
+```
+
+
+d. Repeat your simulation in part b. at least 100 times, create a **visualization** to compare your empirical means and variances to the appropriate theoretical values.
+
+```{r}
+
+```
+
+
+
+
