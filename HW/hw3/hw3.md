@@ -385,6 +385,7 @@ Only difference here is that $l = 3 ^{(2/3)}/h = 1.300052$.
 ![](hw3_files/figure-html/unnamed-chunk-28-1.png)<!-- -->
 
 It seems like the powered exponential covariance, with p = 1.5 is the best at capturing the pattern in the data. 
+
 b. <i>Fit a full Bayesian Gaussian process model using JAGs or similar software. Make sure to think about what covariance function seems appropriate and include any relevant mean structure. Generate draws from the full posterior predictive distribution at the `x` locations given in `gp_truth`, use draw a best fit line and posterior predictive credible intervalfor your model.</i>
 
 Based on the previous GP, I will first use a powered exponential covariance to fit the Bayesian models. 
