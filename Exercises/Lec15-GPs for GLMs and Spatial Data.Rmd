@@ -11,10 +11,15 @@ output:
 library(dplyr)
 library(ggplot2)
 library(patchwork)
+library(purrr)
 
 ggplot2::theme_set(ggplot2::theme_bw())
 
-source("../util.R")
+source("/Users/ethanshen/Documents/Projects for Fun /Spatio-Temporal Modeling/util.R")
+knitr::opts_chunk$set(
+  warning=FALSE,
+  message=FALSE
+)
 ```
 
 # Logistic Model Example 
@@ -99,7 +104,8 @@ tidybayes::gather_draws(JAGS_samps, beta0, l, sigma2) %>%
   mutate(.iteration = floor(.iteration / 10) + 1) %>%
   ggplot(aes(x = .iteration, y = .value, color = .variable)) + 
   geom_line() + 
-  facet_grid(.variable~., scales='free_y')
+  facet_grid(.variable~., scales='free_y') +
+  guides(color=FALSE)
 ```
 
 ### spBayes
@@ -168,7 +174,7 @@ tidybayes::gather_draws(pred, eta[i],p[i]) %>%
   mutate(.variable = case_when(
     .variable=="p" ~ "prob",
     TRUE~as.character(.variable))
-    ) %>%
+  ) %>%
   ggplot(aes(x=x, y=.value)) +
   tidybayes::stat_lineribbon(alpha=0.5, color="red") +
   geom_line(data=tidyr::gather(d, .variable, .value, -x, -y), size=2, linetype=2) +
@@ -187,20 +193,141 @@ g = glm(y~poly(x,2), data=d, family="binomial")
 rbind(
   mutate(d, type = "truth"),
   mutate(d, 
-    type = "glm prediction",
-    eta = predict(g, type="link"),
-    prob = predict(g, type="response")
+         type = "glm prediction",
+         eta = predict(g, type="link"),
+         prob = predict(g, type="response")
   )
 ) %>% 
   tidyr::gather(term, estimate, -x, -y, -type) %>%
   ggplot(aes(x=x, y=estimate, color=type, linetype=type)) +
-    geom_line(size=2) +
-    facet_wrap(~term, scales = "free_y") +
-    scale_color_manual(values = c("red","black"))
+  geom_line(size=2) +
+  facet_wrap(~term, scales = "free_y") +
+  scale_color_manual(values = c("red","black"))
 ```
 
 This GLM has to be smooth because we are fitting a quadratic GLM. However, it can't flatten out at the tails. 
 
 # Spatial Data 
+
+```{r}
+library(sf)
+nc  = st_read("data/nc_counties.gpkg", quiet=TRUE, stringsAsFactors=FALSE)
+air = st_read("data/airports.gpkg", quiet=TRUE, stringsAsFactors=FALSE)
+hwy = st_read("data/us_interstates.gpkg", quiet=TRUE, stringsAsFactors=FALSE)
+```
+
+```{r}
+# for each county, there is a multipolygon that contains the boundaries
+# geometry: multipolygon
+head(tbl_df(nc))
+
+# geometry: point
+head(tbl_df(air))
+
+# geometry: multilinestring
+head(tbl_df(hwy))
+```
+
+## sf Classes
+
+```{r}
+str(nc)
+```
+
+`sf` are also data frames. The geometry column is of type `sfc`, list of items. `sfg` are the actual entries, that contain the geometries. 
+
+## Projections
+
+```{r}
+st_crs(hwy) ; st_crs(air)
+par(mar=c(3,3,3,0.1), mfrow=c(1,3))
+plot(st_geometry(nc),  axes=TRUE, main="nc")
+plot(st_geometry(air), axes=TRUE, pch=16, col="blue", main="air")
+plot(st_geometry(hwy), axes=TRUE, col="red", main="hwy")
+```
+
+
+
+## Example 1 - What counties are adjacent to Durham County? 
+
+```{r}
+# one result for every entry/county in NC
+st_touches(
+  nc,
+  filter(nc, COUNTY == "Durham County")
+) %>% str()
+
+# one result 
+neighbors = st_touches(
+  filter(nc, COUNTY == "Durham County"),
+  nc
+) %>%
+  unlist() %>%
+  slice(nc, .)
+```
+
+### Base R Plots
+
+```{r}
+plot(st_geometry(nc))
+plot(st_geometry(neighbors), add=TRUE, col="lightblue")
+plot(st_geometry(nc[nc$COUNTY == "Durham County",]), add=TRUE, col="red")
+```
+
+### ggplot 
+
+```{r}
+ggplot() + 
+  geom_sf(data=nc, fill="white") + 
+  geom_sf(data=nc %>% filter(COUNTY=="Durham County"), fill="red") + 
+  geom_sf(data=neighbors, fill = "lightblue")
+```
+
+## Example 2 - Which counties have more than 4 neighbors? 
+
+```{r}
+lengths = st_touches(nc) %>% # for each county, tells you which counties it neighbors 
+  map_int(length)   # calculates how many neighbors for each county
+
+many_neighbors = which(lengths > 4) # gives us indices of counties with more than 4 neighbors
+
+ggplot() + 
+  geom_sf(data=nc, fill="white") + 
+  geom_sf(data=nc[many_neighbors, ], fill = "lightblue")
+```
+
+## Example 3 - Which counties have an airport? 
+
+```{r}
+# most of these will be 0, but we want to find ones where length > 0
+airport_counties = st_intersects(nc, air) %>% map_int(length) %>% {which(. > 0)}
+
+ggplot() + 
+  geom_sf(data=nc, alpha = 0) + 
+  geom_sf(data=nc[airport_counties, ], fill = "lightblue") + 
+  geom_sf(data=air %>% filter(STATE=="NC"), color = "red") 
+```
+
+### Base R plot 
+
+```{r}
+plot(st_geometry(nc))
+plot(st_geometry(nc[airport_counties,]), add=TRUE, col="lightblue")
+plot(st_geometry(air), add=TRUE, col="red", pch=16)
+```
+
+Issue is that it is giving us airports that are outside NC. 
+
+```{r}
+# giving ONLY airports inside NC 
+nc_airports = st_intersection(nc, air)
+
+airport_counties = st_intersects(nc, nc_airports) %>% map_int(length) %>% {which(. > 0)}
+
+plot(st_geometry(nc))
+plot(st_geometry(nc[airport_counties,]), add=TRUE, col="lightblue")
+plot(st_geometry(nc_airports), add=TRUE, col="red", pch=16)
+```
+
 
 
