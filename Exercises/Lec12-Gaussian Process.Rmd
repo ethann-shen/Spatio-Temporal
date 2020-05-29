@@ -448,12 +448,14 @@ cond_pred_fix = function(d_pred, d, cov, ..., nugget, reps=1000)
 ```
 
 ```{r warning=FALSE}
+params = (sq_exp_cov_coda2 %>% MCMCvis::MCMCsummary())$mean
+saveRDS(params, "lec_12_params")
 d_pred = data_frame(t = seq(0,1,length.out = 1000))
 
 d_pred_s = cbind(
     data_frame(cov="Post Mean Model"),
     d_pred,
-    cond_pred_fix(d_pred, d, cov = sq_exp_cov, l = 6.9175406, sigma2 = 1.6138634, nugget = 0.1097856, reps=5000) %>% 
+    cond_pred_fix(d_pred, d, cov = sq_exp_cov, l = params[1], sigma2 = params[3], nugget = params[2], reps=5000) %>% 
       t() %>% 
       MCMCvis::MCMCsummary()
   )
@@ -462,7 +464,7 @@ base +
   geom_line(data=d_pred_s, color='red', aes(y=mean), size=1) +
   geom_ribbon(data=d_pred_s, fill='red', alpha=0.1, aes(ymin=`2.5%`, ymax=`97.5%`, y=`50%`)) +
   labs(title = "Posterior Mean Model",
-       subtitle = expression(paste(sigma^2, " = 1.6138634", "\n", "l = 6.9175406", "\n", "nugget = 0.1097856")))
+       subtitle = (paste("sigma^2 = ", round(params[3],5), ", l = ", round(params[1],5), ", nugget = ", round(params[2],5))))
 ```
 
 The `nugget` makes the fitted model so much better! The model fit no longer has to go through the original data points. The ends have a harder time of predicting because they have less neighbors to rely on for information. 

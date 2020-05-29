@@ -202,3 +202,5 @@ rbind(
 This GLM has to be smooth because we are fitting a quadratic GLM. However, it can't flatten out at the tails. 
 
 # Spatial Data 
+
+

@@ -48,7 +48,7 @@ post_summary = function(m, ci_width=0.95) {
 nugget_cov   = function(d, sigma2=1) { ifelse(d==0, sigma2, 0) }
 exp_cov      = function(d, sigma2=1, l=1, sigma2_w=0) { sigma2 * exp(-abs(d)*l) + nugget_cov(d,sigma2_w) }
 sq_exp_cov   = function(d, sigma2=1, l=1, sigma2_w=0) { sigma2 * exp(-(abs(d)*l)^2) + nugget_cov(d,sigma2_w) }
-pow_exp_cov  = function(d, sigma2=1, l=1, p=2) { sigma2 * exp(-(abs(d)*l)^p) }
+pow_exp_cov  = function(d, sigma2=1, l=1, p=1.5) { sigma2 * exp(-(abs(d)*l)^p) }
 rquad_cov    = function(d, sigma2=1, l=1, a=1) { sigma2 * (1+d^2*l^2/a)^(-a) }
 periodic_cov = function(d, sigma2=1, l=1, p=1) { sigma2 * exp(-2*l^2*sin(pi*d/p)^2) }
 matern_cov   = function(d, sigma2=1, l=1, nu=1/2) { fields::Matern(d, alpha=l, nu=nu, phi=sigma2) }

@@ -4,13 +4,17 @@ author: Your Name Here
 date: Due 2/27/2017 by 11:59 pm
 output: 
   html_document:
+    keep_md: TRUE
     theme: cosmo
 ---
 
-```{r}
+```{r echo=FALSE}
 knitr::opts_chunk$set(warning=FALSE,
                       message=FALSE,
                       echo=FALSE)
+```
+
+```{r}
 library(tidyverse)
 library(forecast)
 source("/Users/ethanshen/Documents/Projects for Fun /Spatio-Temporal Modeling/util.R")
@@ -184,10 +188,9 @@ if (file.exists("t5.rds")) {
 
 summary(t5)
 ggtsdisplay(t5$residuals, lag.max=700)
-
 ```
 
-```{r warning=FALSE, include=FALSE}
+```{r}
 model_pred=tibble(
   t=time(taylor),
   true=taylor,
@@ -303,7 +306,7 @@ ggplot(data, aes(x=x, y=y)) +
   geom_smooth(method="lm", formula = y ~ x + I(x^2) + I(x^3) + I(x^4)) 
 ```
 
-## Variogram 
+## Semivariogram - Squared Exponential Covariance
 
 ```{r}
 rbind(
@@ -317,17 +320,15 @@ rbind(
   facet_wrap(~binwidth, ncol=2)
 ```
 
-The variograms all show the same pattern, which is a good indication. 
+The semivariograms all show the same pattern, which is a good indication. 
 
 ```{r}
-rbind(
-  data %>% emp_semivariogram(y, x, bin=TRUE, binwidth=0.05, range_max=max(data$x)) %>% mutate(binwidth="binwidth=0.05")
-) %>% 
+data %>% emp_semivariogram(y, x, bin=TRUE, binwidth=0.05, range_max=max(data$x)) %>% mutate(binwidth="binwidth=0.05") %>% 
   summarise(min_h=min(h),
             min_g=min(gamma))
 ```
 
-From the semivariogram, assume $sigma_w^2$ = 0.1212883. Say the semivariogram starts to asymptote at gamma = 2.5, so $sigma^2$ = 2.5 - 0.1212883 = 2.378712. When fitting a Gaussian Process model, I want to use a squared exponential covariance function with the correlation < 0.05. Thus, let $ d = \sqrt3 / l$. Say the semivariogram starts to asymptote at h = 1.6. Then, $l$ = 1.082532. I want to plot these values just to see if they make sense. 
+From the semivariogram, assume $\sigma_w^2$ = 0.1212883. Say the semivariogram starts to asymptote at gamma = 2.5, so $\sigma^2$ = 2.5 - 0.1212883 = 2.378712. I want to first try using a squared exponential covariance function with the correlation < 0.05. Thus, let $d = \sqrt3 / l$. Say the semivariogram starts to asymptote at h = 1.6. Then, $l$ = 1.082532. I want to plot these values just to see if they make sense. 
 
 ```{r}
 sigma2 = 2.378712
@@ -350,7 +351,9 @@ rbind(
   facet_wrap(~binwidth, ncol=2)
 ```
 
-## Sampling
+They look pretty good. 
+
+## Sampling - Betas & Squared Exponential Covariance
 
 ```{r}
 # values of parameters 
@@ -376,7 +379,7 @@ beta_mu_obs = x_vals_pred %*% betas
 beta_mu_true = x_vals_truth %*% betas
 
 #GP 
-cond_pred = function(d_pred, d, cov, ..., nugget, reps=1000)
+cond_pred_betas = function(d_pred, d, cov, ..., nugget, reps)
 {
   dist_o  = fields::rdist(d$x)
   dist_p  = fields::rdist(d_pred$x)
@@ -395,18 +398,18 @@ cond_pred = function(d_pred, d, cov, ..., nugget, reps=1000)
   cond_mu  = beta_mu_true + (cov_po %*% solve(cov_o) %*% ((d$y)-beta_mu_obs)) 
   
   cond_cov = cov_p - cov_po %*% solve(cov_o) %*% cov_op
-
+  
   cond_mu %*% matrix(1, ncol=reps) + t(chol(cond_cov)) %*% matrix(rnorm(nrow(d_pred)*reps), ncol=reps)
 }
 ```
 
-## Prediction - Betas & Dependence
+## Prediction - Betas & Squared Exponential Covariance
 
 ```{r}
 d_pred = data_frame(x = truth$x)
 GP_predictions_betas = cbind(
   d_pred,
-  cond_pred(d_pred, data, cov = sq_exp_cov, sigma2 = 2.378712, l = 1.082532, nugget=0.1212883, reps=1000) %>%
+  cond_pred_betas(d_pred, data, cov = sq_exp_cov, sigma2 = 2.378712, l = 1.082532, nugget=0.1212883, reps=10000) %>%
     t() %>% 
     post_summary(),
   y=truth$y,
@@ -414,21 +417,79 @@ GP_predictions_betas = cbind(
 ) 
 
 rmse_post_mean_semi = GP_predictions_betas %>%
-  summarise(rmse = (y-post_mean)^2 %>% mean() %>% sqrt() %>% round(6) %>% paste0("RMSE: ", .)
-  )
+  summarise(rmse = (y-post_mean)^2 %>% mean() %>% sqrt() %>% round(6) %>% paste0("RMSE: ", .))
 
 ggplot(truth, aes(x=x, y=y)) + 
   geom_point() +
   geom_line(data=GP_predictions_betas, color='blue', aes(y=post_mean), size=1) +
   geom_ribbon(data=GP_predictions_betas, fill='blue', alpha=0.1, aes(ymin=post_lower, ymax=post_upper, y=post_mean)) + 
   labs(title = "Posterior Predictions",
-       subtitle = paste0("Posterior Mean: ", rmse_post_mean_semi))
+       subtitle = paste0("Posterior Mean: ", rmse_post_mean_semi)) 
 ```
 
+Compared to the linear model, the Gaussian Process (with $\beta$s and squared exponential covariance) seems to be an improvement. However, I want to try fitting the GP with a exponential covariance function too. 
 
+## Prediction - Betas & Exponential Covariance
+
+Only difference here is that $l = 3/h = 3/1.6$. 
+
+```{r}
+l_exp_cov = 1.875
+
+GP_predictions_betas_exp = cbind(
+  d_pred,
+  cond_pred_betas(d_pred, data, cov = exp_cov, sigma2 = sigma2, l = l_exp_cov, nugget=sigma2_w, reps=10000) %>%
+    t() %>% 
+    post_summary(),
+  y=truth$y,
+  model="Gaussian Process Model"
+) 
+
+rmse_post_mean_semi = GP_predictions_betas_exp %>%
+  summarise(rmse = (y-post_mean)^2 %>% mean() %>% sqrt() %>% round(6) %>% paste0("RMSE: ", .))
+
+ggplot(truth, aes(x=x, y=y)) + 
+  geom_point() +
+  geom_line(data=GP_predictions_betas_exp, color='blue', aes(y=post_mean), size=1) +
+  geom_ribbon(data=GP_predictions_betas_exp, fill='blue', alpha=0.1, aes(ymin=post_lower, ymax=post_upper, y=post_mean)) + 
+  labs(title = "Posterior Predictions",
+       subtitle = paste0("Posterior Mean: ", rmse_post_mean_semi)) 
+```
+
+This looks better: it's catching more of the oscillation for `x` < 1, but struggling for 1 < `x` < 2. I want to try a powered exponential covariance, with `p` = 1.5. 
+
+## Prediction - Betas & Powered Exponential Covariance (p=1.5)
+
+Only difference here is that $l = 3 ^{(2/3)}/h = 1.300052$. 
+
+```{r}
+l_pow_exp_cov = 1.300052
+GP_predictions_betas_pow_exp = cbind(
+  d_pred,
+  cond_pred_betas(d_pred, data, cov = pow_exp_cov, sigma2 = sigma2, l = l_pow_exp_cov, nugget=sigma2_w, reps=10000) %>%
+    t() %>% 
+    post_summary(),
+  y=truth$y,
+  model="Gaussian Process Model"
+) 
+
+rmse_post_mean_semi = GP_predictions_betas_pow_exp %>%
+  summarise(rmse = (y-post_mean)^2 %>% mean() %>% sqrt() %>% round(6) %>% paste0("RMSE: ", .))
+
+ggplot(truth, aes(x=x, y=y)) + 
+  geom_point() +
+  geom_line(data=GP_predictions_betas_pow_exp, color='blue', aes(y=post_mean), size=1) +
+  geom_ribbon(data=GP_predictions_betas_pow_exp, fill='blue', alpha=0.1, aes(ymin=post_lower, ymax=post_upper, y=post_mean)) + 
+  labs(title = "Posterior Predictions",
+       subtitle = paste0("Posterior Mean: ", rmse_post_mean_semi)) 
+```
+
+It seems like the powered exponential covariance, with p = 1.5 is the best at capturing the pattern in the data. 
 b. <i>Fit a full Bayesian Gaussian process model using JAGs or similar software. Make sure to think about what covariance function seems appropriate and include any relevant mean structure. Generate draws from the full posterior predictive distribution at the `x` locations given in `gp_truth`, use draw a best fit line and posterior predictive credible intervalfor your model.</i>
 
-## Bayesian GP Model 
+Based on the previous GP, I will first use a powered exponential covariance to fit the Bayesian models. 
+
+# Bayesian GP Model - Mean 0, Powered Exponential Covariance (p=1.5)
 
 ```{r}
 gp_bayes_model="model{
@@ -438,22 +499,22 @@ gp_bayes_model="model{
 }
   for (i in 1:(N-1)) {
     for (j in (i+1):N) {
-      Sigma[i,j] <- sigma2 * exp(- pow(l*d[i,j],2))
+      Sigma[i,j] <- sigma2 * exp(- pow(l*d[i,j],1.5))
       Sigma[j,i] <- Sigma[i,j]
     }
 }
   for (k in 1:N) {
-    Sigma[k,k] <- sigma2 + nugget
+    Sigma[k,k] <- sigma2 + sigma2_w
 }
   sigma2 ~ dlnorm(0, 1.5)
   l ~ dt(0, 2.5, 1) T(0,) # Half-cauchy(0,2.5)
-  nugget ~ dlnorm(0, 1)
+  sigma2_w ~ dlnorm(0, 1)
 }"
 
-if (file.exists("gp_sq_exp_jags.rds")) {
-  sq_exp_cov_coda = readRDS(file="gp_sq_exp_jags.rds")
+if (file.exists("gp_0_mean_pow_exp_jags.rds")) {
+  gp_0_mean_pow_exp_jags = readRDS(file="gp_0_mean_pow_exp_jags.rds")
 } else {
-  m = rjags::jags.model(
+  m.gp_0_mean_pow_exp_jags = rjags::jags.model(
     textConnection(gp_bayes_model), 
     data = list(
       y = (data$y),
@@ -462,21 +523,22 @@ if (file.exists("gp_sq_exp_jags.rds")) {
     )
   )
   
-  update(m, n.iter=5000)
+  update(m.gp_0_mean_pow_exp_jags, n.iter=5000)
   
-  sq_exp_cov_coda = rjags::coda.samples(
-    m, variable.names=c("sigma2", "l", "nugget"),
+  gp_0_mean_pow_exp_jags = rjags::coda.samples(
+    m.gp_0_mean_pow_exp_jags, 
+    variable.names=c("sigma2", "l", "sigma2_w"),
     n.iter=10000
   )
   
-  saveRDS(sq_exp_cov_coda, file="gp_sq_exp_jags.rds")
+  saveRDS(gp_0_mean_pow_exp_jags, file="gp_0_mean_pow_exp_jags.rds")
 }
 ```
 
 ## Trace Plots / MCMC Diagnostics 
 
 ```{r}
-tidybayes::gather_draws(sq_exp_cov_coda, sigma2, l, nugget) %>%
+tidybayes::gather_draws(gp_0_mean_pow_exp_jags, sigma2, l, sigma2_w) %>%
   ggplot(aes(x=.iteration, y=.value, color = .variable)) + 
   geom_line() + 
   facet_grid(.variable~., scales = "free_y")
@@ -485,14 +547,33 @@ tidybayes::gather_draws(sq_exp_cov_coda, sigma2, l, nugget) %>%
 ## Prediction - Bayesian 
 
 ```{r}
-params = (sq_exp_cov_coda %>% MCMCvis::MCMCsummary())$mean
-
-# Parameters
-sigma2_w.bayes = params[2] ; sigma2.bayes = params[3] ; l.bayes = params[1]
+params = (gp_0_mean_pow_exp_jags %>% MCMCvis::MCMCsummary())$mean
+cond_pred = function(d_pred, d, cov, ..., sigma2_w, reps)
+{
+  dist_o  = fields::rdist(d$x)
+  dist_p  = fields::rdist(d_pred$x)
+  dist_op = fields::rdist(d$x, d_pred$x)
+  dist_po = fields::rdist(d_pred$x, d$x)
+  
+  cov_o  = cov(dist_o, ...)
+  cov_p  = cov(dist_p, ...)
+  cov_op = cov(dist_op, ...)
+  cov_po = cov(dist_po, ...)
+  
+  # Adding nugget to diagonal
+  diag(cov_o) = diag(cov_o) + sigma2_w
+  diag(cov_p) = diag(cov_p) + sigma2_w 
+  
+  cond_mu  = cov_po %*% solve(cov_o) %*% (d$y)
+  
+  cond_cov = cov_p - cov_po %*% solve(cov_o) %*% cov_op
+  
+  cond_mu %*% matrix(1, ncol=reps) + t(chol(cond_cov)) %*% matrix(rnorm(nrow(d_pred)*reps), ncol=reps)
+}
 
 GP_predictions_bayes = cbind(
   d_pred,
-  cond_pred(d_pred, data, cov = sq_exp_cov, sigma2 = sigma2.bayes, l = l.bayes, nugget=sigma2_w.bayes, reps=1000) %>% 
+  cond_pred(d_pred, data, cov = pow_exp_cov, l = params[1], sigma2 = params[2], sigma2_w=params[3], reps=10000) %>% 
     t() %>% 
     post_summary(),
   y=truth$y,
@@ -500,8 +581,7 @@ GP_predictions_bayes = cbind(
 ) 
 
 rmse_post_mean_bayes = GP_predictions_bayes %>%
-  summarise(rmse = (y-post_mean)^2 %>% mean() %>% sqrt() %>% round(6) %>% paste0("Bayesian RMSE: ", . )
-  )
+  summarise(rmse = (y-post_mean)^2 %>% mean() %>% sqrt() %>% round(6) %>% paste0("Bayesian RMSE: ", . ))
 
 
 ggplot(truth, aes(x=x, y=y)) + 
@@ -512,33 +592,202 @@ ggplot(truth, aes(x=x, y=y)) +
        subtitle = paste0("Posterior Mean: ", rmse_post_mean_bayes))
 ```
 
+This seems pretty good! However, it seems that the initial GP model with a powered exponential covariance is slightly better. 
+
+# Bayesian GP Model with Betas, Powered Exponential Covariance (p=1.5)
+
+```{r}
+gp_bayes_model_with_betas = "model{
+  y ~ dmnorm(mu, inverse(Sigma))
+
+  for (i in 1:N) {
+    mu[i] <- beta[1]+ beta[2] * x[i] + beta[3] * x[i]^2 + beta[4] * x[i] ^3 + beta[5] * x[i] ^ 4
+  }
+  
+  for (i in 1:(N-1)) {
+    for (j in (i+1):N) {
+      Sigma[i,j] <- sigma2 * exp(- pow(l*d[i,j],1.5))
+      Sigma[j,i] <- Sigma[i,j]
+    }
+  }
+
+  for (k in 1:N) {
+    Sigma[k,k] <- sigma2 + sigma2_w
+  }
+
+  for (i in 1:5) {
+    beta[i] ~ dt(coef[i], 2.5, 1)
+  }
+  sigma2_w ~ dnorm(5, 1/25) T(0,)
+  sigma2   ~ dnorm(12.5, 1/25) T(0,)
+  l        ~ dt(0, 2.5, 1) T(0,) 
+}"
+
+if (file.exists("gp_fit.rds")) {
+  gp_beta_pow_exp_jags = readRDS(file="gp_fit.rds")
+} else {
+  m.gp_beta_pow_exp_jags = rjags::jags.model(
+    textConnection(gp_bayes_model_with_betas), 
+    data = list(
+      y = data$y,
+      x = data$x,
+      d = dist(data$x) %>% as.matrix(),
+      N = nrow(data),
+      coef = coef(lin_mod)
+    )
+  )
+  
+  update(m.gp_beta_pow_exp_jags, n.iter=10000)
+  
+  gp_beta_pow_exp_jags = rjags::coda.samples(
+    m.gp_beta_pow_exp_jags,
+    variable.names=c("beta", "sigma2", "l", "sigma2_w"),
+    n.iter=10000
+  )
+  saveRDS(gp_beta_pow_exp_jags, file="gp_fit.rds")
+}
+```
+
+## Trace Plots - Betas
+
+```{r}
+tidybayes::gather_draws(gp_beta_pow_exp_jags, beta[i]) %>%
+  mutate(param = paste0(.variable, "[", i, "]")) %>%
+  ggplot(aes(x=.iteration, y=.value, color = param)) + 
+  geom_line() + 
+  facet_grid(param~., scales = "free_y")
+```
+
+Definitely correlated (beta4 and beta5 peak and dip at same time)
+
+## Trace Plots - Covariance Parameters
+
+```{r}
+tidybayes::gather_draws(gp_beta_pow_exp_jags, sigma2, l, sigma2_w) %>%
+  ggplot(aes(x=.iteration, y=.value, color = .variable)) + 
+  geom_line() + 
+  facet_grid(.variable~., scales = "free_y")
+```
+
+These are also okay, but they are also slightly correlated (l peaks when sigma2 dips)
+
+## Prediction 
+
+```{r}
+post = bind_rows(
+  tidybayes::gather_draws(gp_beta_pow_exp_jags, beta[i]) %>%
+    ungroup() %>%
+    mutate(.variable = paste0(.variable, "[", i, "]"))
+  ,
+  tidybayes::gather_draws(gp_beta_pow_exp_jags, sigma2, l, sigma2_w) 
+) %>%
+  group_by(.variable) %>%
+  summarize(
+    post_mean = mean(.value),
+    post_med  = median(.value),
+    post_lower = quantile(.value, probs = 0.025),
+    post_upper = quantile(.value, probs = 0.975)
+  )
+
+l_bayes2 = post %>% filter(.variable == 'l') %>% pull(post_mean)
+sigma2_bayes2 = post %>% filter(.variable == 'sigma2') %>% pull(post_mean)
+sigma2_w_bayes2 = post %>% filter(.variable == 'sigma2_w') %>% pull(post_mean)
+
+beta0_bayes2 = post %>% filter(.variable == 'beta[1]') %>% pull(post_mean)
+beta1_bayes2 = post %>% filter(.variable == 'beta[2]') %>% pull(post_mean)
+beta2_bayes2 = post %>% filter(.variable == 'beta[3]') %>% pull(post_mean)
+beta3_bayes2 = post %>% filter(.variable == 'beta[4]') %>% pull(post_mean)
+beta4_bayes2 = post %>% filter(.variable == 'beta[5]') %>% pull(post_mean)
+
+# betas
+betas_bayes = c(beta0_bayes2,beta1_bayes2,beta2_bayes2,beta3_bayes2,beta4_bayes2)
+dim(betas_bayes) <- c(5,1)
+
+# predicted x 
+x_vals_pred_bayes = c(rep(1,nrow(data)), data$x, (data$x)^2, (data$x)^3, (data$x)^4)
+dim(x_vals_pred_bayes) = c(nrow(data),5)
+
+# true x
+x_vals_truth_bayes = c(rep(1,nrow(truth)), truth$x, (truth$x)^2, (truth$x)^3, (truth$x)^4)
+dim(x_vals_truth_bayes) = c(nrow(truth),5)
+
+# mu
+beta_mu_obs_bayes = x_vals_pred_bayes %*% betas_bayes
+beta_mu_true_bayes = x_vals_truth_bayes %*% betas_bayes
+
+cond_pred_bayes_betas = function(d_pred, d, cov, ..., nugget, reps)
+{
+  dist_o  = fields::rdist(d$x)
+  dist_p  = fields::rdist(d_pred$x)
+  dist_op = fields::rdist(d$x, d_pred$x)
+  dist_po = fields::rdist(d_pred$x, d$x)
+  
+  cov_o  = cov(dist_o, ...)
+  cov_p  = cov(dist_p, ...)
+  cov_op = cov(dist_op, ...)
+  cov_po = cov(dist_po, ...)
+  
+  # Adding nugget to diagonal
+  diag(cov_o) = diag(cov_o) + nugget
+  diag(cov_p) = diag(cov_p) + nugget 
+  
+  cond_mu  = beta_mu_true_bayes + (cov_po %*% solve(cov_o) %*% ((d$y)-beta_mu_obs_bayes)) 
+  
+  cond_cov = cov_p - cov_po %*% solve(cov_o) %*% cov_op
+  
+  cond_mu %*% matrix(1, ncol=reps) + t(chol(cond_cov)) %*% matrix(rnorm(nrow(d_pred)*reps), ncol=reps)
+}
+```
+
+```{r}
+GP_predictions_bayes_betas = cbind(
+  d_pred,
+  cond_pred_bayes_betas(d_pred, data, cov = pow_exp_cov, sigma2 = sigma2_bayes2, l = l_bayes2, nugget=sigma2_w_bayes2, reps=10000) %>% 
+    t() %>% 
+    post_summary(),
+  y=truth$y,
+  model="Bayesian Posterior Predictive with Betas"
+) 
+
+rmse_post_mean_bayes_betas = GP_predictions_bayes_betas %>%
+  summarise(rmse = (y-post_mean)^2 %>% mean() %>% sqrt() %>% round(6) %>% paste0("Bayesian RMSE: ", . ))
+
+
+ggplot(truth, aes(x=x, y=y)) + 
+  geom_point() +
+  geom_line(data=GP_predictions_bayes_betas, color='blue', aes(y=post_mean), size=1) +
+  geom_ribbon(data=GP_predictions_bayes_betas, fill='blue', alpha=0.1, aes(ymin=post_lower, ymax=post_upper, y=post_mean)) + 
+  labs(title = "Posterior Predictions",
+       subtitle = rmse_post_mean_bayes_betas)
+```
+
 c. <i>Compare the predictive performance of both approaches, using the `y` values in `gp_truth`. Which method appeared to perform better? Why?</i>
 
 ```{r}
 GP_predictions = rbind(
-  GP_predictions_betas,
-  GP_predictions_bayes
+  GP_predictions_betas_pow_exp,
+  GP_predictions_bayes,
+  GP_predictions_bayes_betas
 ) 
 
-GP_predictions %>%
+rmses = GP_predictions %>%
   group_by(model) %>%
-  summarise(rmse = (y-post_mean)^2 %>% mean() %>% sqrt() %>% round(6))
-
-colors <- c("Gaussian Process Model" = "blue", "Bayesian Posterior Predictive" = "red")
+  summarise(rmse = (y-post_mean)^2 %>% mean() %>% sqrt() %>% round(6)) 
 
 ggplot(truth, aes(x=x, y=y)) + 
   geom_point() + 
-  geom_line(data=GP_predictions %>% filter(model=="Gaussian Process Model"), aes(y=post_mean, color='Gaussian Process Model'), size=1) +
-  geom_ribbon(data=GP_predictions %>% filter(model=="Gaussian Process Model" ), alpha=0.1, aes(ymin=post_lower, ymax=post_upper, y=post_mean, fill='Gaussian Process Model')) + 
   
+  geom_line(data=GP_predictions %>% filter(model=="Gaussian Process Model"), aes(y=post_mean, color='Gaussian Process Model'), size=2) +
+  geom_ribbon(data=GP_predictions %>% filter(model=="Gaussian Process Model"), alpha=0.2, aes(ymin=post_lower, ymax=post_upper, y=post_mean, fill='Gaussian Process Model')) +
   
-  geom_line(data=GP_predictions %>% filter(model=="Bayesian Posterior Predictive" ), aes(y=post_mean, color='Bayesian Posterior Predictive'), size=1) +
-  geom_ribbon(data=GP_predictions %>% filter(model=="Bayesian Posterior Predictive" ), alpha=0.1, aes(ymin=post_lower, ymax=post_upper, y=post_mean, fill='Bayesian Posterior Predictive')) +
+  geom_line(data=GP_predictions %>% filter(model=="Bayesian Posterior Predictive"), aes(y=post_mean, color='Bayesian Posterior Predictive with Mean 0'), size=0.5) +
+  geom_ribbon(data=GP_predictions %>% filter(model=="Bayesian Posterior Predictive"), alpha=0.1, aes(ymin=post_lower, ymax=post_upper, y=post_mean, fill='Bayesian Posterior Predictive with Mean 0')) +
+  
+  geom_line(data=GP_predictions %>% filter(model=="Bayesian Posterior Predictive with Betas"), aes(y=post_mean, color='Bayesian Posterior Predictive with Betas'), size=0.5) +
+  geom_ribbon(data=GP_predictions %>% filter(model=="Bayesian Posterior Predictive with Betas"), alpha=0.1, aes(ymin=post_lower, ymax=post_upper, y=post_mean, fill='Bayesian Posterior Predictive with Betas')) +
+  
   labs(title="Posterior Mean Predictions",
-       subtitle = rmse_post_mean_bayes,
-       color="Model", 
-       fill="Model") +
-    scale_color_manual(values = colors)
-
+       subtitle = paste0("Lowest RMSE: ", rmses[which(rmses$rmse == min(rmses$rmse)), ]$rmse, " (", rmses[which(rmses$rmse == min(rmses$rmse)), ]$model ,")"),
+       color="Model",
+       fill="Model") 
 ```
-
