@@ -301,6 +301,8 @@ Both Moran's I and Geary's C have high p-values, indicating there is spatial aut
 
 e. Fit a CAR model for `PQS` using the weight matrix from a. Does your fitted value of $\phi$ agree with your conclusion in b.?
 
+## Frequentist CAR Model 
+
 ```{r}
 mc_log_car = spatialreg::spautolm(PQS ~ 1,
                                   data = mc_regional, 
@@ -311,6 +313,8 @@ summary(mc_log_car)
 ```
 
 Phi is negative --> negative spatial autocorrelation
+
+### Prediction
 
 ```{r}
 mc_regional$fitted = mc_log_car$fit$fitted.values
@@ -330,7 +334,7 @@ f. Calculate residuals for each region and comment on where the model fits well 
 ```{r}
 mc_regional$log_residuals = mc_log_car$fit$residuals
 
-plot(mc_regional[,"log_residuals"])
+plot(mc_regional[,"log_residuals"]) 
 ```
 
 The residuals are more "spread out" and the pattern is less obvious. There is still some spatial autocorrelation (two dark-ish blue regions in South that are touching) but it is a little better than the non-grouped model. 
