@@ -1,0 +1,442 @@
+---
+title: "Lecture 18 - Fitting CAR & SAR Models"
+author: "Ethan Shen"
+date: "6/3/2020"
+output: 
+  html_document:
+    keep_md: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = F,
+                      message=F)
+library(tidyverse)
+library(sf)
+ggplot2::theme_set(theme_bw())
+source("/Users/ethanshen/Documents/Projects for Fun /Spatio-Temporal Modeling/util.R")
+```
+
+# Example - NC SIDS
+
+Looking at number of births. Modeling a rate (how often do SIDS deaths occur).
+
+```{r}
+nc = st_read(system.file("shape/nc.shp", package="sf"), quiet = TRUE) %>% 
+  select(-(AREA:CNTY_ID), -(FIPS:CRESS_ID)) %>%
+  st_transform(st_crs("+proj=utm +zone=17 +ellps=GRS80 +datum=NAD83 +units=m +no_defs"))
+
+```
+
+```{r}
+ggplot() + 
+  geom_sf(data=nc, aes(fill=SID74/BIR74*1000))
+```
+
+For every 1000 live births, how many infants died from sudden infant death (SID)? 
+
+From the plot, there seems like there is a bit of a pattern (kind of smoothness). 
+
+```{r}
+# sp for dependent models, like AR models. uses old st objects
+library(spdep)
+```
+
+```{r}
+A = st_touches(nc, sparse = F)
+
+# analogous to non-sparse version of st_touches 
+listW = mat2listw(A) # neighborhood object
+```
+
+There are 10,000 total objects. The diagonal is always 0, we never count that. Out of the 9,900 remaining objects, only 490 are non-zero links (for lower diagonal). **Most things are not connected.**
+
+```{r}
+nc_coords = nc %>% st_centroid() %>% st_coordinates()
+
+plot(st_geometry(nc))
+plot(listW, nc_coords, add=TRUE, pch=16, col="blue")
+```
+
+## Moran's I
+
+```{r}
+moran.test(nc$SID74, listW)
+
+moran.test(1000*nc$SID74/nc$BIR74, listW)
+```
+
+P-values show that there is spatial dependence for both. 
+
+## Moran's I
+
+```{r}
+geary.test(nc$SID74, listW)
+
+geary.test(1000*nc$SID74/nc$BIR74, listW)
+```
+
+Interesting that p-value for first Geary C's test is NOT significant 
+
+## Fitting CAR Model - Frequentist 
+
+```{r}
+nc_car = spautolm(formula = SID74/BIR74 ~ 1,
+                  data=nc,
+                  listw = listW,
+                  family = "CAR")
+
+summary(nc_car)
+```
+
+Estimating ~2 deaths per thousand on average. The `lambda` from the model output is `phi` in the model representation.
+
+## Fitting SAR Model - Frequentist 
+
+```{r}
+nc_sar = spautolm(formula = SID74/BIR74 ~ 1,
+                  data=nc,
+                  listw = listW,
+                  family = "SAR")
+
+summary(nc_sar)
+```
+
+Also estimating ~2 deaths per thousand on average. However, the `lambda`s are on different scales. 
+
+## Predictions
+
+```{r}
+nc$car_pred = nc_car$fit$fitted.values
+nc$sar_pred = nc_sar$fit$fitted.values
+
+gridExtra::grid.arrange(
+  ggplot() + geom_sf(data=nc, aes(fill=car_pred)),
+  ggplot() + geom_sf(data=nc, aes(fill=sar_pred)) 
+)
+```
+
+If we ignore scale, the plots look similar. The pattern shows "gentle" patterns between counties. Prediction is the average (2) plus some weighted average of neighbors, so you have to be smooth in that sense. More neighbors imply lower value. 
+
+SAR models tend to smooth more (smaller scale) --> flattening the tails 
+
+## Residuals 
+
+```{r}
+nc$car_resid = nc_car$fit$residuals
+nc$sar_resid = nc_sar$fit$residuals
+
+gridExtra::grid.arrange(
+  ggplot() + geom_sf(data=nc, aes(fill=car_resid)),
+  ggplot() + geom_sf(data=nc, aes(fill=sar_resid))
+) 
+```
+
+Looking for structure in the residuals. This is decent. We can calculate Moran's I for these residuals to see if that's true (we want a high p-value, which implies no significant spatial autocorrelation).
+
+```{r}
+moran.test(nc$car_resid, listW)
+moran.test(nc$sar_resid, listW)
+```
+
+Both Moran's I statistics are ~0, and both have high p-values. This implies the residuals are pretty good. 
+
+## Predicted vs Observed
+
+```{r}
+gridExtra::grid.arrange(
+  ggplot(data = nc) + 
+    geom_abline(intercept=0, slope=1, color="lightgrey") + 
+    geom_point(aes(x=SID74/BIR74, y=car_pred))
+  ,
+  ggplot(data = nc) + 
+    geom_abline(intercept=0, slope=1, color="lightgrey") + 
+    geom_point(aes(x=SID74/BIR74, y=sar_pred)) ) 
+```
+
+However, the actual fit doesn't look great. The goal is to fit `y=x`. 
+
+## What's wrong? 
+
+```{r}
+par(mfrow=c(1,3))
+
+hist(nc$SID74)
+hist(nc$SID74/nc$BIR74)
+qqnorm(nc$car_resid, main = "CAR Residuals");qqline(nc$car_resid)
+```
+
+The QQ plot implies we have right skewed data. Our distribution is also truncated (cannot be less than 0). 
+
+## Comparing CAR vs SAR.
+
+```{r}
+plot(nc$car_resid, nc$sar_resid, main="CAR vs SAR Residuals")
+abline(a = 0, b=1, col="grey")
+```
+
+These are giving almost identical outputs. We can use `CAR` or `SAR` models, but the interpretation of parameters is slightly different. 
+
+# Bayesian CAR Model - STAN 
+
+```{r}
+car_model = "
+data {
+  int<lower=0> N;
+  vector[N] y;
+  matrix[N,N] A;
+  matrix[N,N] D;
+}
+parameters {
+  vector[N] w_s;
+  real beta;
+  real<lower=0> sigma2; // variance in CAR part of model 
+  real<lower=0> sigma2_w; // additional source of error so we get normal model
+  real<lower=0,upper=1> phi;
+}
+transformed parameters {
+  vector[N] y_pred = beta + w_s;
+}
+model {
+
+  // computationally better: don't need to invert matrix for each step 
+  
+  matrix[N,N] Sigma_inv = (D - phi * A) / sigma2; // precision matrix, and usually sparse matrix (mostly 0s)
+  w_s ~ multi_normal_prec(rep_vector(0,N), Sigma_inv); // mvm with precision matrix (multi_normal wants regular covariance matrix)
+
+  beta ~ normal(0,10);
+  sigma2 ~ cauchy(0,5);
+  sigma2_w ~ cauchy(0,5);
+  
+  y ~ normal(beta+w_s, sigma2_w);
+}
+"
+
+if (!file.exists("stan_car.rds")) {
+  car_fit = rstan::stan(
+    model_code = car_model, 
+    data = list(
+      N = nrow(nc),
+      y = nc$SID74 / nc$BIR74,
+      A = A * 1,
+      D = diag(rowSums(A))
+    ),
+    iter = 20000, 
+    chains = 1, 
+    thin=20
+  )
+  saveRDS(car_fit, "stan_car.rds")
+} else {
+  car_fit = readRDS("stan_car.rds")
+}
+```
+
+Why not use conditional definitions for `y's`? 
+
+We can, but we get a bunch of conditional multivariate normals, but we'll have to a bunch of matrix inversion --> computationally inefficient
+
+## Model Diagnostics 
+
+```{r}
+car_params = tidybayes::gather_draws(car_fit, beta, phi, sigma2, sigma2_w)
+car_y_pred = tidybayes::gather_draws(car_fit, y_pred[i])
+```
+
+```{r}
+ggplot(car_params) +
+  geom_line(aes(x=.iteration, y=.value, color=.variable)) +
+  facet_grid(.variable~., scales = "free_y") +
+  guides(color=FALSE)
+```
+
+Clearly correlated, but it's okay. We can run longer + thin. 
+
+## Prediction
+
+```{r}
+nc=car_y_pred %>%
+  ungroup() %>%
+  filter(.chain == 1) %>% 
+  group_by(i) %>% 
+  summarize(
+    bayes_car_pred = mean(.value)
+  ) %>% 
+  bind_cols(nc, .) %>%
+  mutate(
+    bayes_car_resid = SID74/BIR74 - bayes_car_pred
+  )
+
+gridExtra::grid.arrange(
+  ggplot() + geom_sf(data=nc, aes(fill=bayes_car_pred)),
+  ggplot() + geom_sf(data=nc, aes(fill=bayes_car_resid))
+) 
+```
+
+Doesn't look very different from original `spdep` model. 
+
+## CAR - Comparison of Frequentist & Bayesian 
+
+```{r}
+ggplot(nc, aes(x=car_pred, y=bayes_car_pred)) + 
+  geom_point() + 
+  geom_abline(intercept = 0, slope = 1) +
+  xlim(0,0.003) + ylim(0,0.003)
+```
+
+They are more or less predicting the same. 
+
+# Transforming Data 
+
+## Log Transformation
+
+```{r}
+nc = mutate(nc, 
+            log  = log((SID74+1)/BIR74),
+)
+par(mfrow=c(1,2))
+hist(nc$log)
+qqnorm(nc$log)
+qqline(nc$log)
+```
+
+Looks much better than original data. 
+
+```{r}
+ggplot(nc) + geom_sf(aes(fill=log))
+spdep::moran.test(nc$log, listW)
+```
+
+Morans I of 0.3 --> pretty strong evidence of spatial autocorrelation.
+
+# Bayesian log CAR Model 
+
+```{r}
+# using same car_model
+
+if (!file.exists("car_log_fit.rds")) {
+  car_log_fit = rstan::stan(
+    model_code = car_model, 
+    data = list(
+      N = nrow(nc),
+      y = nc$log, # only change
+      x = rep(1, nrow(nc)),
+      A = A * 1,
+      D = diag(rowSums(A))
+    ),
+    iter = 50000, 
+    thin = 20,  
+    chains = 2, 
+    cores = 2
+  )
+  saveRDS(car_log_fit, "car_log_fit.rds")
+} else {
+  car_log_fit = readRDS("car_log_fit.rds")
+}
+```
+
+## Model Diagnostics 
+
+```{r}
+log_car_params = tidybayes::gather_draws(car_log_fit, beta, phi, sigma2, sigma2_w)
+```
+
+```{r}
+ggplot(log_car_params, aes(x = .iteration, y=.value, color = as.factor(.chain))) + 
+  geom_line() + 
+  facet_wrap(.variable~., scales = "free_y") + 
+  guides(color=F)
+```
+
+`beta` is pretty wacky. **we have stronger spatial effect, so `phi` is bouncing against highest possible value (getting to point where we are essentially average of all your neighbors)**
+
+better data --> stan has easier time to fit 
+
+## Posteriors
+
+```{r}
+ggplot(log_car_params, aes(x=.value, fill=as.factor(.chain))) + 
+  geom_density(alpha=0.5) +
+  facet_wrap(~.variable, scale="free_x")
+```
+
+## Predictions
+
+```{r}
+car_log_y_pred = tidybayes::gather_draws(car_log_fit, y_pred[i])
+
+nc$car_log_pred_post_mean = car_log_y_pred %>% 
+  group_by(i) %>% 
+  summarize(y = mean(.value)) %>% 
+  pull(y)
+
+nc$car_pred_post_mean = car_log_y_pred %>% 
+  group_by(i) %>% 
+  summarize(y = mean(exp(.value))) %>% # want to calculate mean of exp, not exp of mean 
+  pull(y)
+
+gridExtra::grid.arrange(
+  ggplot(nc, aes(fill = car_log_pred_post_mean)) + geom_sf() ,
+  ggplot(nc, aes(fill = car_pred_post_mean)) + geom_sf())
+```
+
+These look reasonable, and more smooth on the log scale. 
+
+## Predicted vs Observed - Log Scale
+
+```{r}
+nc %>% 
+  transmute(
+    post_pred_mean = car_log_pred_post_mean,
+    obs_log_rate = log((SID74+1)/BIR74)
+  ) %>%
+  tidyr::gather(pred, value, -geometry) %>%
+  ggplot(aes(fill=value)) + 
+    geom_sf() +
+    facet_wrap(~pred, ncol=1)
+```
+
+## Predicted vs Observed - Normal Scale
+
+```{r}
+nc %>% 
+  transmute(
+    post_pred_mean = car_pred_post_mean,
+    obs_rate = (SID74+1)/BIR74
+  ) %>%
+  tidyr::gather(pred, value, -geometry) %>%
+  ggplot(aes(fill=value)) + 
+    geom_sf() +
+    facet_wrap(~pred, ncol=1)
+```
+
+Both of these look pretty good. 
+
+## Model Fit
+
+Log scale can be deceiving. It will usually always give a `y=x` relationship if you log y and x. 
+
+The outlier in the normal scale is Charlotte. 
+
+```{r}
+ggplot(nc, aes(x=log((SID74+1)/BIR74), y=car_log_pred_post_mean)) + 
+  geom_abline(intercept=0, slope=1, color='grey')+
+  geom_point() + 
+  labs(title = "Predicted vs Observed on Log Scale")
+
+ggplot(nc, aes(x=(SID74+1)/BIR74, y=car_pred_post_mean)) + 
+  geom_abline(intercept=0, slope=1, color='grey')+
+  geom_point() + 
+  labs(title = "Predicted vs Observed on Normal Scale")
+```
+
+## Residuals 
+
+```{r}
+nc = mutate(nc, car_log_resid = car_log_pred_post_mean - log((SID74+1)/BIR74))
+
+ggplot(nc, aes(fill=car_log_resid)) + geom_sf()
+spdep::moran.test(nc$car_log_resid, listW)
+```
+
+Moran's I is close to 0 --> capturing most of the spatial autocorrelation
+
+

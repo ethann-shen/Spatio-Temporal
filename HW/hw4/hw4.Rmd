@@ -1,0 +1,338 @@
+---
+title: "Homework 4"
+author: Your Name Here
+date: Due 4/19/2018 by 11:59 pm
+output: 
+  html_document:
+    keep_md: TRUE
+   
+---
+
+```{r setup, echo=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(message=FALSE, error=FALSE, warning=FALSE)
+library(dplyr)
+library(ggplot2)
+library(sf)
+library(spdep)
+theme_set(theme_bw())
+```
+
+
+### Question 1
+
+4.6.2 from Banerjee, Carlin, Gelfand (2nd ed.) - Suppose $Y_1$ and $Y_2$ are both binary variables, and their joint distribution is defined through conditional logit models. That is,
+
+$$ \log \frac{P(Y_1=1|Y_2)}{P(Y_1=0|Y_2)} = \alpha_0 + \alpha_1 \, Y_2 
+\text{ and } 
+\log \frac{P(Y_2=1|Y_1)}{P(Y_2=0|Y_1)} = \beta_0 + \beta_1 \, Y_1 $$
+
+Obtain the joint distribution of $Y_1$ and $Y_2$. Describe any necessary constraints on the values of $\alpha_0$, $\alpha_1$, $\beta_0$, and $\beta_1$.
+
+
+$$ ~ $$
+
+-----
+
+### Question 2
+
+![](network.png)
+
+a. Derive a weight matrix using the network diagram above. Connected nodes should be indicated with a `1` all other entries should be 0.
+
+
+$$
+W = \begin{pmatrix}\end{pmatrix}
+$$
+
+b. Given that $\boldsymbol\sigma^2 = (\sigma_1^2, \sigma_2^2,\ldots,\sigma_6^2)$ and $\boldsymbol\epsilon \sim \mathcal{N}(\boldsymbol{0},\, \boldsymbol{I}\,\boldsymbol\sigma^2)$ derive the values of $\boldsymbol\Sigma$ and $\boldsymbol\Sigma^{-1}$ for a CAR model.
+
+$$ \boldsymbol\Sigma^{-1} = \begin{pmatrix}\end{pmatrix}$$
+
+c. Repeat b. using an SAR model.
+
+$$ \boldsymbol\Sigma^{-1} = \begin{pmatrix}\end{pmatrix}$$
+
+-----
+
+### Question 3
+
+The data folder in this repository contains two shapefiles describing congressional district boundaries for the 112th (2011-2013) and 114th (2015-2017) congress.
+
+```{r}
+nc112 = st_read('data/nc_districts112.shp', quiet=TRUE, stringsAsFactors=TRUE)
+nc114 = st_read('data/nc_districts114.shp', quiet=TRUE, stringsAsFactors=TRUE)
+nc=st_read("nc_counties.gpkg", quiet=TRUE)
+
+
+plot(nc112[,"DISTRICT"])
+plot(nc114[,"DISTRICT"])
+```
+
+
+a. A simplistic metric of distrinct compactness is the isoperimetric quotient, which is defined as the ratio of a shape's area to the area of a circle that has the same perimeter. Calculate and report this metric for all districts in both data sets. Also assesses if average compactness has changed between the 112th and 114th congress and if so in what direction?
+
+```{r}
+nc112_perim = st_length(st_cast(nc112, "MULTILINESTRING"))
+nc114_perim = st_length(st_cast(nc114, "MULTILINESTRING"))
+nc112_circle_area = (nc112_perim^2) / (4*pi)
+nc114_circle_area = (nc114_perim^2) / (4*pi)
+nc112$isoperimetric_quotient = as.double(st_area(nc112) / nc112_circle_area)
+nc114$isoperimetric_quotient = as.double(st_area(nc114) / nc114_circle_area)
+
+gridExtra::grid.arrange(
+  ggplot(nc112) + 
+    geom_sf(aes(fill=isoperimetric_quotient)) + 
+    labs(title = "NC112") + 
+    scale_fill_gradient(low="blue", high="yellow"),
+  ggplot(nc114) + 
+    geom_sf(aes(fill=isoperimetric_quotient)) + 
+    labs(title = "NC114") + 
+    scale_fill_gradient(low="blue", high="yellow")
+)
+```
+
+In general, the average compactness has not changed. The Western and Southwestern regions of NC have the highest isoperimetric quotient, but it decreases as we move East. The one outlier in the 112th Congress is the small yellow region in the middle of NC, but the average compactness in that region **decreases** in the 114th Congress.
+
+b. Using NC county boundaries, generate a data set containing the congression boundaries of only Durham, Orange and Wake Counties. Plot these boundaries.
+
+```{r }
+ggplot() + 
+  geom_sf(data=nc112, aes(fill = DISTRICT), alpha = 0.4) + 
+  geom_sf(data=nc %>% filter(COUNTY == "Durham County" | 
+                               COUNTY == "Wake County" | 
+                               COUNTY == "Orange County"),
+          fill="blue", alpha = 0.9)
+```
+
+
+```{r }
+congress_boundaries112 = st_intersection(filter(nc, COUNTY == "Durham County" | 
+                                                  COUNTY == "Wake County" | 
+                                                  COUNTY == "Orange County") %>% 
+                                           st_transform(st_crs(nc112)), 
+                                         nc112) 
+
+
+
+gridExtra::grid.arrange(
+  ggplot(congress_boundaries112) + 
+    geom_sf(aes(fill=DISTRICT)) + 
+    theme(legend.position="bottom") 
+  ,
+  ggplot(congress_boundaries112) + 
+    geom_sf(aes(fill=COUNTY)) + 
+    theme(legend.position="bottom", legend.direction = "vertical") 
+  ,
+  ncol=2, top = "NC112"
+)
+
+congress_boundaries114 = st_intersection(filter(nc, COUNTY == "Durham County" | 
+                                                  COUNTY == "Wake County" | 
+                                                  COUNTY == "Orange County") %>% 
+                                           st_transform(st_crs(nc114)), 
+                                         nc114) 
+
+gridExtra::grid.arrange(
+  ggplot(congress_boundaries114) + 
+    geom_sf(aes(fill=DISTRICT)) + 
+    theme(legend.position="bottom") 
+  ,
+  ggplot(congress_boundaries114) + 
+    geom_sf(aes(fill=COUNTY)) + 
+    theme(legend.position="bottom", legend.direction = "vertical") 
+  ,
+  ncol=2, top = "NC114"
+)
+```
+
+c. Create a map showing which regions of NC had their congressional district change between the 112th and 114th congress.
+
+```{r message=FALSE, warning=FALSE}
+g = ggplot()
+for (one in nc114$DISTRICT) {
+  data = st_sym_difference(nc114 %>% filter(DISTRICT==one),
+                           nc112 %>% filter(DISTRICT==one))
+  
+  g = g + 
+    geom_sf(data = data, col="NA", fill="lightblue") + 
+    geom_sf(data=nc, fill=NA)
+}
+
+g
+```
+
+-----
+
+### Question 4
+
+The data directory also contains data on Medicaid program quality scores for the lower 48 U.S. contiguous states in 1986. The data can be loaded as follows.
+
+```{r}
+mc = st_read('data/medicaid1986.shp', quiet=TRUE, stringsAsFactors=TRUE)
+
+par(mfrow=c(1,2))
+hist(mc$PQS)
+qqnorm(mc$PQS)
+qqline(mc$PQS)
+plot(mc[,"PQS"])
+```
+
+a. Construct a weight matrix using adjacency as determined by intersecting boundaries between the states (i.e. touching).
+
+```{r message=FALSE}
+listW = mat2listw(st_touches(mc, sparse=FALSE))
+```
+
+b. Using this weight matrix calculate Moran's I or Geary's C using the `PQS` column in the data. Do your results suggest autocorrelation? If so what kind?
+
+```{r}
+spdep::moran.test(mc$PQS, listw = listW)
+spdep::geary.test(mc$PQS, listw = listW)
+```
+
+Both Moran's I and Geary's C show p-values close to 0, indicating there is spatial autocorrelation. A Moran's I > 0 and a Geary's C < 1 indicates there is weak **positive** spatial autocorrelation.
+
+c. Fit a CAR model for `PQS` using the weight matrix from a. Does your fitted value of $\phi$ agree with your conclusion in b.?
+
+```{r message=FALSE}
+mc_car = spatialreg::spautolm(formula = PQS ~ 1,
+                              data=mc,
+                              listw = listW,
+                              family = "CAR")
+
+summary(mc_car)
+```
+
+A small value of phi indicates that there is weak spatial autocorrelation. Phi is positive --> positive spatial autocorrelation
+
+```{r}
+mc$fitted = mc_car$fit$fitted.values
+
+mc %>% 
+  select(PQS, fitted, geometry) %>%
+  tidyr::gather(type, value, -geometry) %>%
+  ggplot() + 
+  geom_sf(aes(fill=value)) + 
+  facet_grid(type~.)
+```
+
+The predicted and observed values aren't actually that close. The fitted values are much smoother. 
+
+d. Calculate residuals for each state, comment on where the model fits well and where it does not. Does it appear that there still may be unaccounted for spatial structure?
+
+```{r}
+mc$resids <- mc_car$fit$residuals
+
+plot(mc[,"resids"])
+```
+
+Looking at the residuals, it seems the model generally fits well in the Midwest, Southeast, and the East Coast
+
+There still seems to be some spatial structure. Looking at NM, Texas, Oklahoma, Arkansas, and Lousiana, they all have the "same" residual. Nearby states also still have similar residuals (NC & SC), (Indiana & Ohio), etc. 
+
+-----
+
+### Question 5
+
+In this question you will repeat the analysis in Question 4 after aggregating the medicaid data to a regional level. You will have to merge the geometries using their `SUB_REGION` value (e.g. California, Oregon, and Washington should be a single unioned multipolygon for the Pacific region) as well as aggregate `PQS` values (using the mean of the included states).
+
+a. Create an updated sf objected containing the joined regional data.
+
+```{r}
+mc_regional = mc %>%
+  group_by(SUB_REGION) %>%
+  summarise(PQS = sum(PQS))
+
+ggplot() + 
+  geom_sf(data=mc_regional, aes(fill=PQS))
+```
+
+b. Use a cholropleth plot to display the regional values of `PQS`.
+
+```{r}
+library(leaflet)
+bins <- c(600,800,1000,1200,1400,1600)
+pal <- colorBin("YlOrRd", domain = mc_regional$PQS, bins = bins)
+labels <- sprintf(
+  "<strong>%s</strong><br/>PQS: %g",
+  mc_regional$SUB_REGION, mc_regional$PQS
+) %>% 
+  lapply(htmltools::HTML)
+
+leaflet(mc_regional %>% st_transform('+proj=longlat +datum=WGS84')) %>%
+  addTiles() %>%
+  addPolygons(
+    fillColor = ~pal(PQS),
+    weight = 2,
+    opacity = 1,
+    color = "white",
+    dashArray = "3",
+    fillOpacity = 0.7,
+    highlight = highlightOptions(
+      weight = 5,
+      color = "#666",
+      dashArray = "",
+      fillOpacity = 0.7,
+      bringToFront = TRUE),
+    label = labels,
+    labelOptions = labelOptions(
+      style = list("font-weight" = "normal", padding = "3px 8px"),
+      textsize = "15px",
+      direction = "auto")) %>% 
+  addLegend(pal = pal, values = ~PQS, opacity = 0.7, title = NULL,
+            position = "bottomright")
+
+```
+
+c. Construct a weight matrix using adjacency as determined by intersecting boundaries between the regions (i.e. touching).
+
+```{r}
+listW_regional = mat2listw(st_touches(mc_regional, sparse=F))
+```
+
+d. Using this weight matrix calculate Moran's I or Geary's C using the `PQS` column in the data. Do your results suggest autocorrelation? If so what kind?
+
+```{r}
+moran.test(mc_regional$PQS, listW_regional)
+geary.test(mc_regional$PQS, listW_regional)
+```
+
+Both Moran's I and Geary's C have high p-values, indicating there is spatial autocorrelation. The negative Moran's I value and Geary's C > 1 indicate **negative** spatial autocorrelation. 
+
+e. Fit a CAR model for `PQS` using the weight matrix from a. Does your fitted value of $\phi$ agree with your conclusion in b.?
+
+```{r}
+mc_log_car = spatialreg::spautolm(PQS ~ 1,
+                                  data = mc_regional, 
+                                  listw = listW_regional,
+                                  family="CAR")
+
+summary(mc_log_car)
+```
+
+Phi is negative --> negative spatial autocorrelation
+
+```{r}
+mc_regional$fitted = mc_log_car$fit$fitted.values
+
+mc_regional %>% 
+  select(PQS, fitted, geometry) %>%
+  tidyr::gather(type, value, -geometry) %>%
+  ggplot() + 
+  geom_sf(aes(fill=value)) + 
+  facet_grid(type~.)
+```
+
+The predictions are slightly better, but still pretty smooth. 
+
+f. Calculate residuals for each region and comment on where the model fits well and where it does not. Does it appear that there still may be unaccounted for spatial structure?
+
+```{r}
+mc_regional$log_residuals = mc_log_car$fit$residuals
+
+plot(mc_regional[,"log_residuals"])
+```
+
+The residuals are more "spread out" and the pattern is less obvious. There is still some spatial autocorrelation (two dark-ish blue regions in South that are touching) but it is a little better than the non-grouped model. 
+
+

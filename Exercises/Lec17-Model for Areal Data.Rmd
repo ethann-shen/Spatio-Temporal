@@ -1,0 +1,136 @@
+---
+title: "Lecture 17 - Models for Areal Data"
+author: "Ethan Shen"
+date: "5/31/2020"
+output: 
+  html_document:
+    keep_md: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = F,
+                      message=F)
+library(tidyverse)
+library(sf)
+ggplot2::theme_set(theme_bw())
+source("/Users/ethanshen/Documents/Projects for Fun /Spatio-Temporal Modeling/util.R")
+```
+
+# Areal / Lattice Data 
+
+```{r}
+nc = st_read(system.file('shape/nc.shp', package="sf"), quiet=T) %>%
+  st_transform(st_crs("+proj=utm +zone=17 +ellps=GRS80 +datum=NAD83 +units=m +no_defs"))
+
+
+plot(nc[,"SID79"], axes=FALSE, graticule=st_crs(4326), las=1, reset=FALSE)
+plot(st_centroid(st_geometry(nc)), pch=16, add=TRUE)
+```
+
+
+```{r}
+normalize_weights = function(w) {
+  diag(w) = 0
+  rs = rowSums(w) # find sum of each row in matrix 
+  rs[rs == 0] = 1 # prevent divide by 0 error 
+  w/rs
+}
+```
+
+## Moran's I 
+
+Use a proximity matrix, where values are the number of bordering counties
+
+```{r}
+morans_I = function(y, w) {
+  w = normalize_weights(w)
+  n = length(y)
+  y_bar = mean(y)
+  num = sum(w * (y-y_bar) %*% t(y-y_bar))  
+  denom = sum( (y-y_bar)^2 )
+  (n/sum(w)) * (num/denom)
+}
+
+w = 1*st_touches(nc, sparse=FALSE) # matrix of 0's and 1's
+
+morans_I(y = nc$SID79, w)
+
+ape::Moran.I(nc$SID79, weight = w) %>% str()
+```
+
+## Geary's C
+
+Using same proximity matrix from before (# of bordering counties)
+
+```{r}
+gearys_C = function(y, w) {
+  w = normalize_weights(w)
+  
+  n = length(y)
+  y_bar = mean(y)
+  y_i = y %*% t(rep(1,n))
+  y_j = t(y_i)
+  num = sum(w * (y_i-y_j)^2)  
+  denom = sum( (y-y_bar)^2 )
+  ((n-1)/(2*sum(w))) * (num/denom)
+}
+
+w = 1*st_touches(nc, sparse=FALSE)
+
+gearys_C(y = nc$SID79, w = w)
+```
+
+## Spatial Correlogram 
+
+```{r}
+nc_pt = st_centroid(nc)
+plot(nc_pt[,"SID74"], pch=16, axes=T)
+```
+
+### Distance Bins 
+
+```{r}
+dist_matrix = nc_pt %>% 
+  st_distance() %>% # distance between centroids of each county
+  strip_class()
+
+breaks = seq(0, max(dist_matrix), length.out = 31)
+
+# distance bins 
+distance_bins = cut(dist_matrix, breaks)
+
+# 30 100 x 100 matrices
+adj_mats = purrr::map(
+  levels(distance_bins), # all bins except NA (30)
+  function(l) {
+    m = matrix(distance_bins == l, ncol=ncol(dist_matrix), nrow=nrow(dist_matrix))
+    diag(m) = 0 # w_ii = 0
+    m
+  }
+)
+
+morans_gearys = data_frame(
+  dist = breaks[-1],
+  morans = purrr::map_dbl(adj_mats, morans_I, y = nc$SID79), # calculating Moran's I for each distance bin (Moran's I for 1st order neighbor, 2nd order neighbor... 30th order neighbor)
+  gearys = purrr::map_dbl(adj_mats, gearys_C, y = nc$SID79)
+)
+```
+
+```{r}
+morans_gearys %>%
+  tidyr::gather(var, value, -dist) %>%
+  mutate(var = forcats::as_factor(var)) %>%
+  ggplot(aes(x=dist, y=value, color=var)) + 
+    geom_line() + 
+    facet_wrap(~var, scales = "free_y")
+```
+
+```{r}
+ggplot(morans_gearys, aes(x=morans, y=gearys)) +
+  geom_point() + 
+  geom_smooth(method="lm", se=FALSE, fullrange=TRUE) + 
+  labs(title="Inverse Relationship between Geary's C and Moran's I")
+```
+
+
+

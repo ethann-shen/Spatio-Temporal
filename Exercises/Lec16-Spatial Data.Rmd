@@ -1,0 +1,268 @@
+---
+title: "Lecture 16 - Spatial Data and Cartography"
+author: "Ethan Shen"
+date: "5/30/2020"
+output: 
+  html_document:
+    keep_md: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = F,
+                      message=F)
+library(tidyverse)
+library(sf)
+library(sp)
+ggplot2::theme_set(new=theme_bw())
+```
+
+# NC Data 
+
+```{r}
+nc = st_read(system.file('shape/nc.shp', package="sf"))
+```
+
+### Plotting - Base R
+
+Discrete variable = discrete color palette 
+
+These are plotting `sf` objects. 
+
+```{r}
+plot(nc, max.plot=14)
+plot(nc[,"BIR74"], 
+     graticule = st_crs(nc), # coordinate reference system of the NC dataset 
+     axes=T)
+```
+
+This plots an `sfc` object. 
+
+```{r}
+plot(st_geometry(nc), axes=TRUE)
+```
+
+### Plotting - ggplot2
+
+Automatically convert to latitude/longitude projection
+
+```{r}
+ggplot(nc) + 
+  geom_sf(aes(fill=SID79)) +
+  scale_fill_viridis_c()
+```
+
+# Meuse Data (river data)
+
+`meuse` is actual observed data (measurement of heavy metal at a specific point (x, y coordinate))
+
+`meuse.riv` is polygon describing boundary of river 
+
+```{r}
+data(meuse, meuse.riv)
+
+meuse = st_as_sf(meuse, # converting sp to sf
+                 coords=c("x", "y"), # need to also specify coordinates 
+                 crs=28992 # coordinate reference system 
+)  
+
+meuse.riv = st_polygon(list(meuse.riv)) %>% # turning initial matrix object of x's and y's into a polygon (polygon has shell. first argument in st_polygon is the external bit, internal bits (additional arguments/additional matrices) would be holes. a river doesn't have holes)
+  st_sfc() %>% # turning sfg object into sfc
+  st_set_crs(28992) # geometries don't have reference systems, but sfc's do 
+
+head(tbl_df(meuse))
+head(tbl_df(meuse.riv))
+```
+
+```{r}
+ggplot() +
+  geom_sf(data=meuse, aes(color=lead)) + 
+  geom_sf(data=meuse.riv, fill="lightblue", col=NA)
+
+# tells us bounding box of our data 
+# st_bbox(meuse)
+
+ggplot() +
+  geom_sf(data=meuse.riv, fill="lightblue", col=NA) +
+  geom_sf(data=meuse, aes(color=lead)) + 
+  ylim(st_bbox(meuse)["ymin"], st_bbox(meuse)["ymax"])
+```
+
+# Geometry Manipulation 
+
+### Casting 
+
+changing type 
+
+```{r}
+nc_pts = st_cast(nc, "MULTIPOINT") # changing multipolygon --> multipoint (which is just coordinates of boundaries of each county)
+
+plot(st_geometry(nc_pts), pch=16, cex=0.5)
+
+nc_p = st_cast(nc, "POINT") # gives individual points 
+
+plot(st_geometry(nc_p), pch=16, cex=0.5) # plot is the same thing 
+```
+
+### Grouping Features 
+
+```{r}
+union = st_union(nc)
+tbl_df(union)
+plot(union)
+```
+
+`st_union` doesn't know how to group other columns, so it just deletes them.
+
+```{r}
+nc_cut = nc %>%
+  mutate(
+    # longitude of centroid of each county 
+    X = st_centroid(nc) %>% 
+      st_coordinates() %>% # matrix of X and Ys 
+      .[,1],
+    # latitude of centroid of each county 
+    Y = st_centroid(nc) %>% 
+      st_coordinates() %>% # matrix of X and Ys 
+      .[,2],
+    region = cut(X, breaks=5))
+
+ggplot(nc_cut) + 
+  geom_sf(aes(fill=region))
+
+nc_cut %>%
+  group_by(region) %>%
+  summarise() %>%  # will union geometries together, only end up with geometries
+  ggplot() + 
+  geom_sf(aes(fill=region))
+```
+
+# NC Highway Example 
+
+```{r}
+hwy_nc = st_intersection(hwy %>% st_transform(st_crs(nc)), # not transforming CRS of hwy will cause error
+                         nc)
+ggplot() +
+  geom_sf(data=nc) +
+  geom_sf(data=hwy_nc, col="red")
+```
+
+### Changing Projection to UTM 
+
+```{r}
+nc_utm = st_transform(nc, "+proj=utm +zone=17 +datum=NAD83 +units=m +no_defs")
+ggplot() +
+  geom_sf(data=nc_utm) + 
+  geom_sf(data=hwy_nc, col='red')
+```
+
+### Adding Buffer 
+
+```{r}
+hwy_nc_buffer = hwy_nc %>%
+  st_transform("+proj=utm +zone=17 +datum=NAD83 +units=m +no_defs") %>% 
+  st_buffer(10000) # specified to be in meters
+
+hwy_nc_buffer_km = hwy_nc %>%
+  st_transform("+proj=utm +zone=17 +datum=NAD83 +units=km +no_defs") %>% 
+  st_buffer(10) # specified to be in kilometers
+
+ggplot() +
+  geom_sf(data=nc_utm) +
+  geom_sf(data=hwy_nc, color='red') + 
+  geom_sf(data=hwy_nc_buffer, fill='red', alpha=0.3)
+
+ggplot() +
+  geom_sf(data=nc_utm) +
+  geom_sf(data=hwy_nc, color='red') + 
+  geom_sf(data=hwy_nc_buffer_km, fill='red', alpha=0.3)
+```
+
+Why are there little circles showing up in the plot? The interstates are multiple linestrings, not one "continuous one", which is why there are segments. 
+
+We want to fix this by making just one large polygon. 
+
+### Unioning Buffer 
+
+```{r}
+# one polygon
+hwy_nc_buffer_union = hwy_nc_buffer %>%
+  st_union() %>%
+  st_sf()
+
+ggplot() +
+  geom_sf(data=nc_utm) +
+  geom_sf(data=hwy_nc, color='red') + 
+  geom_sf(data=hwy_nc_buffer_union, fill='red', alpha=0.3)
+```
+
+# Example - Counties within 10 km of an interstate highway
+
+```{r}
+ten_miles_within = st_intersects(nc, hwy_nc_buffer_union %>% 
+                                   st_transform(st_crs(nc))) %>% 
+  purrr::map_int(length) %>% 
+  {which(. > 0)}
+
+ggplot() +
+  geom_sf(data=nc, fill=NA) +
+  geom_sf(data=nc[ya,], fill="lightblue") + 
+  #geom_sf(data=hwy_nc, color='red') + 
+  geom_sf(data=hwy_nc_buffer_union, fill='red', alpha=0.3) + 
+  labs(caption = paste0(length(ten_miles_within), " counties within 10 km of an interstate"))
+```
+
+# Gerrymandering Example 
+
+```{r}
+nc_house = st_read("data/nc_districts112.gpkg") %>%
+  st_transform("+proj=utm +zone=17 +datum=NAD83 +units=km +no_defs")
+plot(nc_house[,"DISTRICT"], axes=TRUE)
+```
+
+We want to measure some of this craziness in boundaries. These are obviously not geographically compact. 
+
+### Reock Score 
+
+Measure of compactness calculated as the ratio area of a shape to the area of its minimum bounding circle. Closer to 1 is good 
+
+```{r}
+circs = nc_house %>%
+  st_geometry() %>%
+  lwgeom::st_minimum_bounding_circle()
+
+ggplot() + 
+  geom_sf(data=nc_house, aes(fill=DISTRICT)) + 
+  geom_sf(data=circs, fill=NA)
+```
+
+### Calculating Reock Score 
+
+```{r}
+nc_house = nc_house %>%
+  mutate(reock = st_area(nc_house) / st_area(circs)) # calculating area of districts + circles
+
+plot(nc_house[, "reock"])
+```
+
+# Raster Data 
+
+```{r}
+meuse_rast = raster::raster(system.file('external/test.grd', package="raster"))
+
+# colors are actual values, white is missing data / NAs
+plot(meuse_rast)
+plot(meuse.riv, add=TRUE, col="lightblue")
+```
+
+# Spatial Models 
+
+```{r}
+head(st_coordinates(meuse))
+```
+
+
+
+
+
+
+ 
