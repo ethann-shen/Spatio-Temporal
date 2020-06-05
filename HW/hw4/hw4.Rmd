@@ -96,16 +96,6 @@ In general, the average compactness has not changed. The Western and Southwester
 b. Using NC county boundaries, generate a data set containing the congression boundaries of only Durham, Orange and Wake Counties. Plot these boundaries.
 
 ```{r }
-ggplot() + 
-  geom_sf(data=nc112, aes(fill = DISTRICT), alpha = 0.4) + 
-  geom_sf(data=nc %>% filter(COUNTY == "Durham County" | 
-                               COUNTY == "Wake County" | 
-                               COUNTY == "Orange County"),
-          fill="blue", alpha = 0.9)
-```
-
-
-```{r }
 congress_boundaries112 = st_intersection(filter(nc, COUNTY == "Durham County" | 
                                                   COUNTY == "Wake County" | 
                                                   COUNTY == "Orange County") %>% 
@@ -242,14 +232,18 @@ a. Create an updated sf objected containing the joined regional data.
 mc_regional = mc %>%
   group_by(SUB_REGION) %>%
   summarise(PQS = sum(PQS))
-
-ggplot() + 
-  geom_sf(data=mc_regional, aes(fill=PQS))
 ```
 
 b. Use a cholropleth plot to display the regional values of `PQS`.
 
 ```{r}
+ggplot(data=mc_regional) + 
+  geom_sf(aes(fill=PQS)) + 
+   geom_sf_label(aes(label = PQS))
+```
+
+
+```{r include=FALSE}
 library(leaflet)
 bins <- c(600,800,1000,1200,1400,1600)
 pal <- colorBin("YlOrRd", domain = mc_regional$PQS, bins = bins)
