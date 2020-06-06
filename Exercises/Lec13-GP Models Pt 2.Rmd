@@ -60,6 +60,19 @@ base
 ### Empirical Semivariograms
 
 ```{r}
+library(geoR)
+coords = d$t %>% dist() %>% as.matrix()
+dist = fields::rdist(coords)
+par(mfrow=c(2,2))
+variog(coords=d$t %>% dist() %>% as.matrix(), data = d$y, messages = FALSE,
+       uvec = seq(0, max(dist), length.out=100)) %>% plot(main = "100")
+variog(coords=coords, data = d$y, messages = FALSE,
+       uvec = seq(0, max(dist), length.out=75)) %>% plot(main = "75")
+variog(coords=coords, data = d$y, messages = FALSE,
+       uvec = seq(0, max(dist), length.out=50)) %>% plot(main = "50")
+variog(coords=d$t %>% dist() %>% as.matrix(), data = d$y, messages = FALSE,
+       uvec = seq(0, max(dist), length.out=30)) %>% plot(main = "30")
+
 d_emp = rbind(
   d %>% emp_semivariogram(y, t, bin=TRUE, binwidth=0.05)  %>% mutate(binwidth="binwidth=0.05"),
   d %>% emp_semivariogram(y, t, bin=TRUE, binwidth=0.075) %>% mutate(binwidth="binwidth=0.075"),
@@ -79,7 +92,7 @@ Parameter values from last time:
 
 ```{r}
 params_lec12 = readRDS("lec_12_params")
-l = params_lec12[1] ; sigma2 = params_lec12[3] ; nugget = params_lec12[2]
+l = params_lec12[1] ; sigma2 = params_lec12[3] ; sigma2_w = params_lec12[2]
 
 d_fit = data_frame(h=seq(0, 1 ,length.out = 100)) %>%
   mutate(gamma = sigma2 + sigma2_w - (sigma2 * exp(-(l*h)^2)))

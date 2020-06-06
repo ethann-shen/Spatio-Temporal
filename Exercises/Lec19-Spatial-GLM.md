@@ -176,7 +176,7 @@ ggplot(lip_cancer) +
   labs(title="GLM Residuals",
        subtitle = paste0("Moran's I: ", 
                          round(
-                           moran.test(lip_cancer$glm_resid, listW)$estimate[1] %>% strip_attrs(), 3),
+                           moran.test(lip_cancer$glm_resid, listW)$estimate[1], 3),
                          " & RMSE: ",
                          round(lip_cancer$glm_resid %>% .^2 %>% mean() %>% sqrt(), 3)
        )
@@ -229,13 +229,14 @@ if (!file.exists("hierarchical_car_model.Rdata")) {
       X = model.matrix(~(lip_cancer$pcaff)),
       W = W,
       log_offset = log(lip_cancer$Expected)
-    )
+    ),
+    n.adapt=50000
   )
-  update(m, n.iter=25000)
+  update(m, n.iter=50000)
   
   hierarchical_car_coda = rjags::coda.samples(
     m, variable.names=c("sigma2","tau", "beta", "omega", "phi", "y_pred"),
-    n.iter=50000, thin=25
+    n.iter=100000, thin=50
   )
   save(hierarchical_car_coda, m, file="hierarchical_car_model.Rdata")
 } else {
@@ -304,7 +305,7 @@ ggplot(lip_cancer) +
     labs(title="CAR Residuals", 
          subtitle = paste0("Moran's I: ", 
                          round(
-                           moran.test(lip_cancer$car_resid, listW)$estimate[1] %>% strip_attrs(), 3),
+                           moran.test(lip_cancer$car_resid, listW)$estimate[1], 3),
                          " & RMSE: ",
                          round(lip_cancer$car_resid %>% .^2 %>% mean() %>% sqrt(), 3)
        ))
@@ -350,13 +351,14 @@ if (!file.exists("hierarchical_iar_model.Rdata")) {
       X = model.matrix(~(lip_cancer$pcaff)),
       W = W,
       log_offset = log(lip_cancer$Expected)
-    )
+    ),
+    n.adapt=50000
   )
-  update(m, n.iter=25000)
+  update(m, n.iter=50000)
   
   hierarchical_iar_coda = rjags::coda.samples(
     m, variable.names=c("sigma2","tau", "beta", "omega", "y_pred"),
-    n.iter=50000, thin=25
+    n.iter=100000, thin=50
   )
   save(hierarchical_iar_coda, m, file="hierarchical_iar_model.Rdata")
 } else {
@@ -413,7 +415,7 @@ ggplot(lip_cancer) +
     labs(title="Residuals",
          subtitle = paste0("Moran's I: ", 
                          round(
-                           moran.test(lip_cancer$iar_resid, listW)$estimate[1] %>% strip_attrs(), 3),
+                           moran.test(lip_cancer$iar_resid, listW)$estimate[1], 3),
                          " & RMSE: ",
                          round(lip_cancer$iar_resid %>% .^2 %>% mean() %>% sqrt(), 3)
        )
@@ -457,13 +459,14 @@ if (!file.exists("hierarchical_iar_model2.Rdata")) {
       X = model.matrix(~(lip_cancer$pcaff)),
       W = W,
       log_offset = log(lip_cancer$Expected)
-    )
+    ),
+    n.adapt=50000
   )
-  update(m, n.iter=25000)
+  update(m, n.iter=50000)
   
   hierarchical_iar_coda2 = rjags::coda.samples(
     m, variable.names=c("sigma2","tau", "beta", "omega", "y_pred"),
-    n.iter=50000, thin=25
+    n.iter=100000, thin=50
   )
   save(hierarchical_iar_coda2, m, file="hierarchical_iar_model2.Rdata")
 } else {
@@ -518,7 +521,7 @@ ggplot(lip_cancer) +
     labs(title="Residuals",
          subtitle = paste0("Moran's I: ", 
                          round(
-                           moran.test(lip_cancer$iar2_resid, listW)$estimate[1] %>% strip_attrs(), 3),
+                           moran.test(lip_cancer$iar2_resid, listW)$estimate[1], 3),
                          " & RMSE: ",
                          round(lip_cancer$iar2_resid %>% .^2 %>% mean() %>% sqrt(), 3)
        )
@@ -537,35 +540,22 @@ lip_cancer %>%
            forcats::as_factor()) %>%
   group_by(model) %>%
   summarize(
-    rmse = resid^2 %>% mean() %>% sqrt(),
-    moran = spdep::moran.test(resid, listW)$estimate[1]
+    moran = spdep::moran.test(resid, listW)$estimate[1],
+    rmse = resid^2 %>% mean() %>% sqrt()
   ) 
 ```
 
 ```
 ## # A tibble: 4 x 3
-##   model  rmse   moran
-##   <fct> <dbl>   <dbl>
-## 1 glm    7.48 0.333  
-## 2 car    1.50 0.0371 
-## 3 iar    3.20 0.107  
-## 4 iar2   1.63 0.00888
+##   model   moran  rmse
+##   <fct>   <dbl> <dbl>
+## 1 glm   0.333    7.48
+## 2 car   0.0324   1.56
+## 3 iar   0.141    3.86
+## 4 iar2  0.00596  1.64
 ```
 
 The CAR model has the lowest RMSE, but the reparametrized IAR has the lowest Moran's I. The best model should be the IAR2. 
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
