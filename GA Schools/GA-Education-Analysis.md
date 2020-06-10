@@ -9,7 +9,9 @@ output:
 
 
 
-This project seeks to predict the average graduation rate of high schools in each county in GA. 
+# Introduction
+
+This project seeks to predict the average graduation rate of high schools in each county in GA. I present 5 models, four of which are SAR and CAR models that take into account the spatial autocorrelation of each county. Then, I perform diagnostics on each of the models to see which one is the best at predicting the average graduation rate of each county, while taking into account the spatial autocorrelation that is present. 
 
 # Data
 
@@ -92,7 +94,7 @@ hist(log(max(grad_rate$Graduation_RateH) + 1 - grad_rate$Graduation_RateH), main
 
 ![](GA-Education-Analysis_files/figure-html/unnamed-chunk-6-1.png)<!-- -->
 
-It seems like the last transformation looks the most "normal". I will use the transformed version, `Graduation_RateH_transformed`, in my analysis. 
+It seems like the last transformation looks the most "normal". I will use the transformed version, `Graduation_RateH_transformed`, in my analysis. This transformation is achieved by the following formula: `x_transformed = log(max(x) + 1 - x)`.
 
 
 ```r
@@ -102,21 +104,24 @@ grad_rate = grad_rate %>%
 
 
 ```r
-gridExtra::grid.arrange(
-  ggplot() + 
-    geom_sf(data=init_counties, fill=NA) + 
-    geom_sf(data = grad_rate, aes(fill=Graduation_RateH)) +
-    scale_fill_continuous(na.value="white") + 
-    labs(title = "Graduation Rate"),
-  ggplot() + 
-    geom_sf(data=init_counties, fill=NA) +  
-    geom_sf(data = grad_rate, aes(fill=Graduation_RateH_transformed)) +
-    scale_fill_continuous(na.value="white") + 
-    labs(title = "Transformed Graduation Rate"),
-  ncol=2)
+ggplot() + 
+  geom_sf(data=init_counties, fill=NA) + 
+  geom_sf(data = grad_rate, aes(fill=Graduation_RateH)) +
+  scale_fill_continuous(na.value="white") + 
+  labs(title = "Graduation Rate")
 ```
 
 ![](GA-Education-Analysis_files/figure-html/unnamed-chunk-8-1.png)<!-- -->
+
+```r
+ggplot() + 
+  geom_sf(data=init_counties, fill=NA) +  
+  geom_sf(data = grad_rate, aes(fill=Graduation_RateH_transformed)) +
+  scale_fill_continuous(na.value="white") + 
+  labs(title = "Transformed Graduation Rate")
+```
+
+![](GA-Education-Analysis_files/figure-html/unnamed-chunk-8-2.png)<!-- -->
 
 ## Creating Weight Matrix 
 
@@ -130,6 +135,8 @@ plot(listW, st_geometry(st_centroid(grad_rate)), pch=16, col="blue", add=TRUE)
 ```
 
 ![](GA-Education-Analysis_files/figure-html/unnamed-chunk-9-1.png)<!-- -->
+
+There are 154 counties in this dataset, which means we are missing information from 5 counties. We can see some of the missing counties in this plot. 
 
 ## Moran's and Geary's 
 
@@ -250,23 +257,26 @@ grad_rate_modeling$lm_log_pred = model %>% fitted()
 grad_rate_modeling$lm_log_resid = model %>% residuals()
 grad_rate_modeling$lm_pred = max(grad_rate_modeling$Graduation_RateH) + 1 - exp(grad_rate_modeling$lm_log_pred) 
 
-gridExtra::grid.arrange(
-  ggplot() + 
-    geom_sf(data=grad_rate_modeling, aes(fill=lm_log_pred)) + 
-    labs(title = "Log LM Predictions") + 
-    geom_sf(data=init_counties, fill=NA)+
-    scale_fill_continuous(na.value="white")
-  ,
-  ggplot() + 
-    geom_sf(data=grad_rate_modeling, aes(fill=lm_pred)) + 
-    labs(title = "LM Predictions") + 
-    geom_sf(data=init_counties, fill=NA)+
-    scale_fill_continuous(na.value="white"),
-  ncol=2
-)
+ggplot() + 
+  geom_sf(data=grad_rate_modeling, aes(fill=lm_log_pred)) + 
+  labs(title = "Log LM Predictions") + 
+  geom_sf(data=init_counties, fill=NA)+
+  scale_fill_continuous(na.value="white")
 ```
 
 ![](GA-Education-Analysis_files/figure-html/unnamed-chunk-14-1.png)<!-- -->
+
+```r
+ggplot() + 
+  geom_sf(data=grad_rate_modeling, aes(fill=lm_pred)) + 
+  labs(title = "LM Predictions") + 
+  geom_sf(data=init_counties, fill=NA)+
+  scale_fill_continuous(na.value="white")
+```
+
+![](GA-Education-Analysis_files/figure-html/unnamed-chunk-14-2.png)<!-- -->
+
+These prediction seems okay, but there seem to be some issues predicting counties with lower graduation rates. 
 
 # Frequentist SAR & CAR Model 
 
@@ -359,42 +369,51 @@ grad_rate_modeling$car_pred_log = grad_rate_car$fit$fitted.values
 
 grad_rate_modeling$sar_pred = max(grad_rate_modeling$Graduation_RateH) + 1 - exp(grad_rate_modeling$sar_pred_log) 
 
-grad_rate_modeling$car_pred = max(grad_rate_modeling$Graduation_RateH) + 1 - exp(grad_rate_modeling$car_pred_log) 
-
-gridExtra::grid.arrange(
-  ggplot() + 
-    geom_sf(data=init_counties, fill=NA) + 
-    geom_sf(data=grad_rate_modeling, aes(fill=sar_pred_log)) +
-    scale_fill_continuous(na.value="white") + 
-    labs(title = "Log SAR Predictions"),
-   ggplot() + 
-    geom_sf(data=init_counties, fill=NA) + 
-    geom_sf(data=grad_rate_modeling, aes(fill=sar_pred)) +
-    scale_fill_continuous(na.value="white") + 
-    labs(title = "SAR Predictions"),
-  ncol=2
-) 
+grad_rate_modeling$car_pred = max(grad_rate_modeling$Graduation_RateH) + 1 - exp(grad_rate_modeling$car_pred_log)
 ```
 
-![](GA-Education-Analysis_files/figure-html/unnamed-chunk-16-1.png)<!-- -->
 
 ```r
-gridExtra::grid.arrange(
-  ggplot() + 
-    geom_sf(data=init_counties, fill=NA) + 
-    geom_sf(data=grad_rate_modeling, aes(fill=car_pred_log)) +
-    scale_fill_continuous(na.value="white") + 
-    labs(title = "Log CAR Predictions"),
-  ggplot() + 
-    geom_sf(data=init_counties, fill=NA) + 
-    geom_sf(data=grad_rate_modeling, aes(fill=car_pred)) +
-    scale_fill_continuous(na.value="white") + 
-    labs(title = "CAR Predictions"),
-  ncol=2
-) 
+ggplot() + 
+  geom_sf(data=init_counties, fill=NA) + 
+  geom_sf(data=grad_rate_modeling, aes(fill=sar_pred_log)) +
+  scale_fill_continuous(na.value="white") + 
+  labs(title = "Log SAR Predictions")
 ```
 
-![](GA-Education-Analysis_files/figure-html/unnamed-chunk-16-2.png)<!-- -->
+![](GA-Education-Analysis_files/figure-html/unnamed-chunk-17-1.png)<!-- -->
+
+```r
+ggplot() + 
+  geom_sf(data=init_counties, fill=NA) + 
+  geom_sf(data=grad_rate_modeling, aes(fill=sar_pred)) +
+  scale_fill_continuous(na.value="white") + 
+  labs(title = "SAR Predictions")
+```
+
+![](GA-Education-Analysis_files/figure-html/unnamed-chunk-17-2.png)<!-- -->
+
+```r
+ggplot() + 
+  geom_sf(data=init_counties, fill=NA) + 
+  geom_sf(data=grad_rate_modeling, aes(fill=car_pred_log)) +
+  scale_fill_continuous(na.value="white") + 
+  labs(title = "Log CAR Predictions")
+```
+
+![](GA-Education-Analysis_files/figure-html/unnamed-chunk-17-3.png)<!-- -->
+
+```r
+ggplot() + 
+  geom_sf(data=init_counties, fill=NA) + 
+  geom_sf(data=grad_rate_modeling, aes(fill=car_pred)) +
+  scale_fill_continuous(na.value="white") + 
+  labs(title = "CAR Predictions")
+```
+
+![](GA-Education-Analysis_files/figure-html/unnamed-chunk-17-4.png)<!-- -->
+
+Once again, the models are struggling with the counties with lower graduation rates. The prediction for the Northeastern region of GA looks the best. 
 
 ## Residuals
 
@@ -403,30 +422,35 @@ gridExtra::grid.arrange(
 grad_rate_modeling$sar_log_resid = grad_rate_sar$fit$residuals
 grad_rate_modeling$car_log_resid = grad_rate_car$fit$residuals
 
-gridExtra::grid.arrange(
-  ggplot() + 
-    geom_sf(data=init_counties, fill=NA) + 
-    geom_sf(data=grad_rate_modeling, aes(fill=sar_log_resid)) +
-    scale_fill_continuous(na.value="white") + 
-    labs(title = "SAR Residuals",
-         subtitle = paste0("Moran's I: ", 
-                           round(moran.test(grad_rate_modeling$sar_log_resid, 
-                                            listW_neigh, 
-                                            na.action = na.exclude)$estimate[1],3))),
-  ggplot() + 
-    geom_sf(data=init_counties, fill=NA) + 
-    geom_sf(data=grad_rate_modeling, aes(fill=car_log_resid)) +
-    scale_fill_continuous(na.value="white") + 
-    labs(title = "CAR Residuals",
-         subtitle = paste0("Moran's I: ", 
-                           round(moran.test(grad_rate_modeling$car_log_resid, 
-                                            listW_neigh, 
-                                            na.action = na.exclude)$estimate[1],3))),
-  ncol=2
-) 
+
+ggplot() + 
+  geom_sf(data=init_counties, fill=NA) + 
+  geom_sf(data=grad_rate_modeling, aes(fill=sar_log_resid)) +
+  scale_fill_continuous(na.value="white") + 
+  labs(title = "SAR Residuals",
+       subtitle = paste0("Moran's I: ", 
+                         round(moran.test(grad_rate_modeling$sar_log_resid, 
+                                          listW_neigh, 
+                                          na.action = na.exclude)$estimate[1],3)))
 ```
 
-![](GA-Education-Analysis_files/figure-html/unnamed-chunk-17-1.png)<!-- -->
+![](GA-Education-Analysis_files/figure-html/unnamed-chunk-18-1.png)<!-- -->
+
+```r
+ggplot() + 
+  geom_sf(data=init_counties, fill=NA) + 
+  geom_sf(data=grad_rate_modeling, aes(fill=car_log_resid)) +
+  scale_fill_continuous(na.value="white") + 
+  labs(title = "CAR Residuals",
+       subtitle = paste0("Moran's I: ", 
+                         round(moran.test(grad_rate_modeling$car_log_resid, 
+                                          listW_neigh, 
+                                          na.action = na.exclude)$estimate[1],3)))
+```
+
+![](GA-Education-Analysis_files/figure-html/unnamed-chunk-18-2.png)<!-- -->
+
+There is very little spatial autocorrelation in the residuals, which means the SAR and CAR models have taken into account most of the spatial autocorrelation. 
 
 
 
@@ -496,9 +520,9 @@ tidybayes::gather_draws(car_fit2, beta, phi, sigma2, sigma2_w) %>%
   guides(color=FALSE)
 ```
 
-![](GA-Education-Analysis_files/figure-html/unnamed-chunk-21-1.png)<!-- -->
+![](GA-Education-Analysis_files/figure-html/unnamed-chunk-22-1.png)<!-- -->
 
-The chains generally look fine. `sigma2` and `sigma2_w` are pretty correlated. 
+The chains generally look fine, though `sigma2` and `sigma2_w` are fairly correlated. 
 
 ## Prediction & Residuals
 
@@ -514,35 +538,61 @@ grad_rate_modeling$bayes_car_log_pred = tidybayes::gather_draws(car_fit2, y_pred
 
 grad_rate_modeling$bayes_car_log_resid = grad_rate_modeling$Graduation_RateH_transformed - grad_rate_modeling$bayes_car_log_pred
 
-
-gridExtra::grid.arrange(
-  ggplot() +  
-    geom_sf(data=init_counties, fill=NA) + 
-    geom_sf(data=grad_rate_modeling, aes(fill=bayes_car_log_pred)) +
-    scale_fill_continuous(na.value="white") + 
-    labs(title = "Bayesian CAR Predictions", 
-         subtitle = paste0("RMSE: ",
-                           grad_rate_modeling$bayes_car_log_resid %>% 
-                             .^2 %>% 
-                             mean() %>% 
-                             sqrt() %>% 
-                             round(3)
-         )),
-  ggplot() +  
-    geom_sf(data=init_counties, fill=NA) + 
-    geom_sf(data=grad_rate_modeling, aes(fill=bayes_car_log_resid)) +
-    scale_fill_continuous(na.value="white") + 
-    labs(title = "Bayesian CAR Residuals",
-         subtitle = paste0("Moran's I: ", 
-                           round(moran.test(grad_rate_modeling$bayes_car_log_resid, 
-                                            listW_neigh, 
-                                            na.action = na.exclude)$estimate[1],3)
-         )),
-  ncol=2
-) 
+ggplot() +  
+  geom_sf(data=init_counties, fill=NA) + 
+  geom_sf(data=grad_rate_modeling, aes(fill=bayes_car_log_pred)) +
+  scale_fill_continuous(na.value="white") + 
+  labs(title = "Bayesian Log CAR Predictions", 
+       subtitle = paste0("RMSE: ",
+                         grad_rate_modeling$bayes_car_log_resid %>% 
+                           .^2 %>% 
+                           mean() %>% 
+                           sqrt() %>% 
+                           round(3)
+       ))
 ```
 
-![](GA-Education-Analysis_files/figure-html/unnamed-chunk-22-1.png)<!-- -->
+![](GA-Education-Analysis_files/figure-html/unnamed-chunk-23-1.png)<!-- -->
+
+```r
+grad_rate_modeling$bayes_car_log_pred_transformed = max(grad_rate_modeling$Graduation_RateH) + 1 - exp(grad_rate_modeling$bayes_car_log_pred)
+
+ggplot() +  
+  geom_sf(data=init_counties, fill=NA) + 
+  geom_sf(data=grad_rate_modeling, aes(fill=bayes_car_log_pred_transformed)) +
+  scale_fill_continuous(na.value="white") + 
+  labs(title = "Bayesian CAR Predictions", 
+       subtitle = paste0("RMSE: ",
+                         grad_rate_modeling$bayes_car_log_resid %>% 
+                           .^2 %>% 
+                           mean() %>% 
+                           sqrt() %>% 
+                           round(3)
+       ))
+```
+
+![](GA-Education-Analysis_files/figure-html/unnamed-chunk-23-2.png)<!-- -->
+
+The predictions look better and the model has a lower RMSE than the frequentist SAR and CAR models, mainly due to the model's ability to better predict lower graduation rates. 
+
+
+```r
+ggplot() +  
+  geom_sf(data=init_counties, fill=NA) + 
+  geom_sf(data=grad_rate_modeling, aes(fill=bayes_car_log_resid)) +
+  scale_fill_continuous(na.value="white") + 
+  labs(title = "Bayesian CAR Residuals",
+       subtitle = paste0("Moran's I: ", 
+                         round(moran.test(grad_rate_modeling$bayes_car_log_resid, 
+                                          listW_neigh, 
+                                          na.action = na.exclude)$estimate[1],3)
+       ))
+```
+
+![](GA-Education-Analysis_files/figure-html/unnamed-chunk-24-1.png)<!-- -->
+
+The residuals are fine, but they have slightly more spatial autocorrelation than the frequentist SAR and CAR models. 
+
 # Bayesian CAR Model - Transformed & with Betas
 
 
@@ -612,7 +662,7 @@ tidybayes::gather_draws(car_fit_betas, beta[i]) %>%
   guides(color=FALSE)
 ```
 
-![](GA-Education-Analysis_files/figure-html/unnamed-chunk-24-1.png)<!-- -->
+![](GA-Education-Analysis_files/figure-html/unnamed-chunk-26-1.png)<!-- -->
 
 ```r
 tidybayes::gather_draws(car_fit_betas, beta[i]) %>% 
@@ -625,7 +675,7 @@ tidybayes::gather_draws(car_fit_betas, beta[i]) %>%
   guides(color=FALSE)
 ```
 
-![](GA-Education-Analysis_files/figure-html/unnamed-chunk-24-2.png)<!-- -->
+![](GA-Education-Analysis_files/figure-html/unnamed-chunk-26-2.png)<!-- -->
 
 ```r
 tidybayes::gather_draws(car_fit_betas, sigma2, sigma2_w, phi) %>% 
@@ -636,9 +686,9 @@ tidybayes::gather_draws(car_fit_betas, sigma2, sigma2_w, phi) %>%
   guides(color=FALSE)
 ```
 
-![](GA-Education-Analysis_files/figure-html/unnamed-chunk-24-3.png)<!-- -->
+![](GA-Education-Analysis_files/figure-html/unnamed-chunk-26-3.png)<!-- -->
 
-The chains look better than the chains from the previous model. 
+The chains look better than the chains from the previous model. `sigma2` and `sigma2_w` are no longer obviously correlated. 
 
 ## Prediction & Residuals
 
@@ -654,41 +704,67 @@ grad_rate_modeling$bayes_car_betas_log_pred = tidybayes::gather_draws(car_fit_be
 
 grad_rate_modeling$bayes_car_betas_log_resid = grad_rate_modeling$Graduation_RateH_transformed - grad_rate_modeling$bayes_car_betas_log_pred
 
-gridExtra::grid.arrange(
-  ggplot() +  
-    geom_sf(data=init_counties, fill=NA) + 
-    geom_sf(data=grad_rate_modeling, aes(fill=bayes_car_betas_log_pred)) +
-    scale_fill_continuous(na.value="white") + 
-    labs(title = "Bayesian CAR (with Betas) Predictions", 
-         subtitle = paste0("RMSE: ",
-                           grad_rate_modeling$bayes_car_betas_log_resid %>% 
-                             .^2 %>% 
-                             mean() %>% 
-                             sqrt() %>% 
-                             round(3)
-         )),
-  ggplot() +  
-    geom_sf(data=init_counties, fill=NA) + 
-    geom_sf(data=grad_rate_modeling, aes(fill=bayes_car_betas_log_resid)) +
-    scale_fill_continuous(na.value="white") + 
-    labs(title = "Bayesian CAR (with Betas) Residuals",
-         subtitle = paste0("Moran's I: ", 
-                           round(moran.test(grad_rate_modeling$bayes_car_betas_log_resid, 
-                                            listW_neigh, 
-                                            na.action = na.exclude)$estimate[1],3)
-         )),
-  ncol=2
-) 
+ggplot() +  
+  geom_sf(data=init_counties, fill=NA) + 
+  geom_sf(data=grad_rate_modeling, aes(fill=bayes_car_betas_log_pred)) +
+  scale_fill_continuous(na.value="white") + 
+  labs(title = "Bayesian CAR (with Betas) Predictions", 
+       subtitle = paste0("RMSE: ",
+                         grad_rate_modeling$bayes_car_betas_log_resid %>% 
+                           .^2 %>% 
+                           mean() %>% 
+                           sqrt() %>% 
+                           round(3)
+       ))
 ```
 
-![](GA-Education-Analysis_files/figure-html/unnamed-chunk-25-1.png)<!-- -->
+![](GA-Education-Analysis_files/figure-html/unnamed-chunk-27-1.png)<!-- -->
 
-# Summary of Models 
+```r
+grad_rate_modeling$bayes_car_betas_log_pred_transformed = max(grad_rate_modeling$Graduation_RateH) + 1 - exp(grad_rate_modeling$bayes_car_betas_log_pred)
+
+ggplot() +  
+  geom_sf(data=init_counties, fill=NA) + 
+  geom_sf(data=grad_rate_modeling, aes(fill=bayes_car_betas_log_pred_transformed)) +
+  scale_fill_continuous(na.value="white") + 
+  labs(title = "Bayesian CAR (with Betas) Predictions", 
+       subtitle = paste0("RMSE: ",
+                         grad_rate_modeling$bayes_car_betas_log_resid %>% 
+                           .^2 %>% 
+                           mean() %>% 
+                           sqrt() %>% 
+                           round(3)
+       ))
+```
+
+![](GA-Education-Analysis_files/figure-html/unnamed-chunk-27-2.png)<!-- -->
+
+The model has a lower RMSE than the frequentist SAR and CAR models but higher than the previous Bayesian CAR model.
+
+
+```r
+ggplot() +  
+  geom_sf(data=init_counties, fill=NA) + 
+  geom_sf(data=grad_rate_modeling, aes(fill=bayes_car_betas_log_resid)) +
+  scale_fill_continuous(na.value="white") + 
+  labs(title = "Bayesian CAR (with Betas) Residuals",
+       subtitle = paste0("Moran's I: ", 
+                         round(moran.test(grad_rate_modeling$bayes_car_betas_log_resid, 
+                                          listW_neigh, 
+                                          na.action = na.exclude)$estimate[1],3)
+       ))
+```
+
+![](GA-Education-Analysis_files/figure-html/unnamed-chunk-28-1.png)<!-- -->
+
+This model has the lowest Moran's I statistic, meaning the residuals for this model are the least spatially autocorrelated. 
+
+# Summary of Models & Conclusion
 
 
 ```r
 grad_rate_modeling %>%
-  as_data_frame() %>%
+  as_tibble() %>%
   select(ends_with("log_resid")) %>%
   tidyr::gather(model, resid) %>% 
   mutate(model = stringr::str_replace(model, "_resid","") %>% 
@@ -696,23 +772,27 @@ grad_rate_modeling %>%
   group_by(model) %>%
   summarize(
     rmse = resid^2 %>% mean(na.rm=TRUE) %>% sqrt(),
-    moran = moran.test(resid, listW_neigh, na.action = na.exclude)$estimate[1]
+    moran = moran.test(resid, listW_neigh)$estimate[1],
+    geary = geary.test(resid, listW_neigh)$estimate[1]
   ) %>%
   arrange(rmse)
 ```
 
 ```
-## # A tibble: 5 x 3
-##   model                rmse    moran
-##   <fct>               <dbl>    <dbl>
-## 1 bayes_car_log       0.145 -0.0742 
-## 2 bayes_car_betas_log 0.324 -0.00843
-## 3 car_log             0.462 -0.0165 
-## 4 sar_log             0.462  0.00173
-## 5 lm_log              0.462  0.0178
+## # A tibble: 5 x 4
+##   model                rmse    moran geary
+##   <fct>               <dbl>    <dbl> <dbl>
+## 1 bayes_car_log       0.145 -0.0742  1.11 
+## 2 bayes_car_betas_log 0.324 -0.00843 1.03 
+## 3 car_log             0.462 -0.0165  0.985
+## 4 sar_log             0.462  0.00173 0.967
+## 5 lm_log              0.462  0.0178  0.950
 ```
 
-It seems that the simple Bayesian CAR Model has the best predictive power (lowest RMSE), and the Bayesian CAR model with the `betas` has the lowest spatial autocorrelation (lowest Moran's I). Either of these models will be fine to choose as the final model. 
+It seems that the simple Bayesian CAR Model has the best predictive power (lowest RMSE), and the Bayesian CAR model with the `betas` has the lowest spatial autocorrelation (lowest Moran's I). However, for all the models, the Moran's I statistic is close to 0 and the Geary's C statistic is close to 1, the best model is the Bayesian CAR model. 
 
+# Limitations
+
+The biggest issue with the data is the skewness of `Graduation_RateH`. Without a transformation, the distribution is extremely left skewed. Even after the transformation, the data is still left skewed. Because of this, it is not hard to predict which counties have a lower average graduation rate, but rather hard to predict the **value** of that average graduation rate. 
 
 
